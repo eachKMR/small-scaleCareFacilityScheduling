@@ -1,0 +1,206 @@
+/**
+ * スケジュールグリッドのスタイル
+ * テーブル、セル、編集状態のスタイリング
+ */
+
+/* グリッドコンテナ */
+#schedule-grid-container {
+    padding: var(--spacing-md);
+    background: var(--color-background);
+    border-radius: var(--border-radius);
+    overflow: auto;
+    max-height: 70vh;
+    box-shadow: var(--shadow-light);
+}
+
+/* スケジュールテーブル */
+.schedule-grid {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    font-size: var(--font-size-sm);
+    min-width: 800px;
+}
+
+/* ヘッダーセル */
+.header-cell {
+    background: var(--color-primary);
+    color: white;
+    padding: var(--spacing-sm);
+    text-align: center;
+    font-weight: bold;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border: 1px solid var(--color-border);
+}
+
+.header-name {
+    min-width: 120px;
+    position: sticky;
+    left: 0;
+    z-index: 11;
+}
+
+.header-date {
+    min-width: 40px;
+    width: 40px;
+}
+
+/* 土日の色分け */
+.header-date.saturday {
+    background: var(--color-info);
+}
+
+.header-date.sunday {
+    background: var(--color-danger);
+}
+
+/* 定員オーバー警告 */
+.header-date.over-capacity {
+    background: var(--color-warning) !important;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.7; }
+}
+
+/* 利用者名セル */
+.user-name-cell {
+    background: var(--color-background);
+    padding: var(--spacing-sm);
+    font-weight: bold;
+    text-align: center;
+    vertical-align: middle;
+    border: 1px solid var(--color-border);
+    position: sticky;
+    left: 0;
+    z-index: 9;
+    min-width: 120px;
+}
+
+/* ユーザー行 */
+.user-row {
+    height: 32px;
+}
+
+.day-stay-row {
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.visit-row {
+    border-bottom: 2px solid var(--color-border);
+}
+
+/* スケジュールセル */
+.schedule-cell {
+    padding: 4px;
+    text-align: center;
+    vertical-align: middle;
+    border: 1px solid var(--color-border-light);
+    min-width: 40px;
+    width: 40px;
+    height: 32px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    background: white;
+}
+
+.schedule-cell:hover:not(.editing) {
+    background: var(--color-hover);
+    transform: scale(1.05);
+}
+
+.schedule-cell.hover {
+    background: var(--color-hover);
+}
+
+/* セルタイプ別スタイル */
+.dayStay-cell {
+    border-top: 2px solid var(--color-border);
+}
+
+.visit-cell {
+    border-bottom: 2px solid var(--color-border);
+}
+
+/* セル状態別スタイル */
+.schedule-cell.stay-active {
+    background: var(--color-stay-active);
+    color: white;
+    font-weight: bold;
+}
+
+.schedule-cell.day-active {
+    background: var(--color-day-active);
+    color: white;
+    font-weight: bold;
+}
+
+.schedule-cell.visit-active {
+    background: var(--color-visit-active);
+    color: var(--color-text);
+    font-weight: bold;
+}
+
+/* 入所・退所の特別スタイル */
+.schedule-cell.stay-in {
+    background: var(--color-success);
+    color: white;
+    font-weight: bold;
+}
+
+.schedule-cell.stay-out {
+    background: var(--color-info);
+    color: white;
+    font-weight: bold;
+}
+
+/* 編集状態 */
+.schedule-cell.editing {
+    background: var(--color-warning-light);
+    border: 2px solid var(--color-warning);
+    outline: none;
+    box-shadow: 0 0 5px var(--color-warning);
+    transform: scale(1.1);
+    z-index: 100;
+}
+
+.schedule-cell.validation-error {
+    background: var(--color-danger-light);
+    border-color: var(--color-danger);
+}
+
+/* 編集中の他セル無効化 */
+.schedule-cell.disabled-during-edit {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* 備考アイコン */
+.note-icon {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    font-size: 10px;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.schedule-cell.has-note {
+    position: relative;
+}
+
+.schedule-cell.has-note::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-top: 8px solid var(--color-accent);
+}

@@ -1,0 +1,208 @@
+/**
+ * ツールバーのスタイル
+ * 月選択、Excel入出力ボタン、定員チェックボタン
+ */
+
+/* ツールバーコンテナ */
+#toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-md);
+    background: var(--color-background);
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: var(--shadow-light);
+    min-height: var(--toolbar-height);
+}
+
+/* 左側コントロール */
+.toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+/* 右側ボタン群 */
+.toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+/* 月選択 */
+.month-selector-container {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.month-selector-label {
+    font-weight: bold;
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+}
+
+.month-selector {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    background: white;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+
+.month-selector:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+}
+
+.month-selector:hover {
+    border-color: var(--color-primary);
+}
+
+/* ツールバーボタン */
+.toolbar-btn {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    background: white;
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    min-width: 100px;
+    justify-content: center;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+    background: var(--color-hover);
+    border-color: var(--color-primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-light);
+}
+
+.toolbar-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+.toolbar-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--color-background);
+}
+
+/* ボタン種類別スタイル */
+.excel-import-btn {
+    border-color: var(--color-success);
+    color: var(--color-success);
+}
+
+.excel-import-btn:hover:not(:disabled) {
+    background: var(--color-success);
+    color: white;
+}
+
+.excel-export-btn {
+    border-color: var(--color-info);
+    color: var(--color-info);
+}
+
+.excel-export-btn:hover:not(:disabled) {
+    background: var(--color-info);
+    color: white;
+}
+
+.capacity-check-btn {
+    border-color: var(--color-warning);
+    color: var(--color-warning);
+}
+
+.capacity-check-btn:hover:not(:disabled) {
+    background: var(--color-warning);
+    color: white;
+}
+
+/* Excel入力コンテナ */
+.excel-import-container {
+    position: relative;
+}
+
+#excel-file-input {
+    display: none;
+}
+
+/* ローディング状態 */
+.toolbar-btn.loading {
+    position: relative;
+    color: transparent;
+}
+
+.toolbar-btn.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    border: 2px solid transparent;
+    border-top: 2px solid currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* レスポンシブデザイン */
+@media (max-width: 768px) {
+    #toolbar {
+        flex-direction: column;
+        gap: var(--spacing-sm);
+        padding: var(--spacing-sm);
+        min-height: auto;
+    }
+    
+    .toolbar-left,
+    .toolbar-right {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .toolbar-right {
+        flex-wrap: wrap;
+        gap: var(--spacing-xs);
+    }
+    
+    .toolbar-btn {
+        min-width: 80px;
+        padding: var(--spacing-xs) var(--spacing-sm);
+        font-size: var(--font-size-xs);
+    }
+    
+    .month-selector {
+        padding: var(--spacing-xs) var(--spacing-sm);
+        font-size: var(--font-size-xs);
+    }
+}
+
+@media (max-width: 480px) {
+    .toolbar-right {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .toolbar-btn {
+        width: 100%;
+        min-width: auto;
+    }
+}
