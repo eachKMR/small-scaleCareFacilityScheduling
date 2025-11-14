@@ -1,346 +1,329 @@
 /**
- * アプリケーションのメインクラス
- * EventEmitterを継承し、全コントローラーとUIコンポーネントを統合管理
+ * Appクラス（アプリケーション統合）
+ * すべてのコンポーネントとコントローラーを統合管理
  */
-class App extends EventEmitter {
-    constructor() {
-        // 依存関係チェック
-        if (typeof window.EventEmitter === 'undefined') {
-            throw new Error('EventEmitter is required');
-        }
-        if (typeof window.Logger === 'undefined') {
-            throw new Error('Logger is required');
-        }
-        if (typeof window.StorageService === 'undefined') {
-            throw new Error('StorageService is required');
-        }
-        if (typeof window.ExcelService === 'undefined') {
-            throw new Error('ExcelService is required');
-        }
-
-        super();
-        
-        this.currentYearMonth = null;
-        this.controllers = {};
-        this.components = {};
-        this.isInitialized = false;
-        
-        Logger?.info('App instance created');
-    }
-    
+class App {
     /**
-     * アプリケーション全体を初期化
+     * コンストラクタ
      */
-    async init() {
+    constructor() {
+        this.logger = new Logger('App');
+        
+        // サービス層
+        this.storageService = null;
+        
+        // コントローラー層
+        this.scheduleController = null;
+        this.capacityCheckController = null;
+        this.noteController = null;
+        this.excelController = null;
+        
+        // コンポーネント層
+        this.toolbar = null;
+        this.capacityIndicator = null;
+        this.scheduleGrid = null;
+        
+        this.initialized = false;
+    }
+
+    // ==================== 初期化 ====================
+
+    /**
+     * アプリケーションを初期化
+     */
+    async initialize() {
         try {
-            Logger?.info('=== App initialization started ===');
+            this.logger.info('=== Application Starting ===');
             
-            // 1. コントローラー初期化
-            this.initControllers();
+            // ローディング表示
+            this.showLoading('システム初期化中...');
             
-            // 2. デフォルト月を設定
-            const now = new Date();
-            this.currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            // サービス層の初期化
+            this.initializeServices();
             
-            // 3. データ読み込み
+            // コントローラー層の初期化
+            this.initializeControllers();
+            
+            // コンポーネント層の初期化
+            this.initializeComponents();
+            
+            // データの読み込み
             await this.loadInitialData();
             
-            // 4. UIコンポーネント初期化
-            this.initComponents();
+            // ローディング非表示
+            this.hideLoading();
             
-            // 5. イベントリスナー設定
-            this.setupEventListeners();
-            
-            // 6. 初回レンダリング
-            this.render();
-            
-            this.isInitialized = true;
-            Logger?.info('=== App initialization completed ===');
-            this.showToast('アプリケーションを起動しました', 'success');
+            this.initialized = true;
+            this.logger.info('=== Application Started ===');
             
         } catch (error) {
-            Logger?.error('App initialization failed:', error);
-            this.showError('初期化に失敗しました: ' + error.message);
+            this.logger.error('Failed to initialize application:', error);
+            this.showError('アプリケーションの初期化に失敗しました', error);
+        }
+    }
+
+    /**
+     * サービス層を初期化
+     */
+    initializeServices() {
+        this.logger.info('Initializing services...');
+        
+        // StorageService
+        this.storageService = new StorageService();
+        
+        this.logger.info('Services initialized');
+    }
+
+    /**
+     * コントローラー層を初期化
+     */
+    initializeControllers() {
+        this.logger.info('Initializing controllers...');
+        
+        // ScheduleController
+        this.scheduleController = new ScheduleController(this.storageService);
+        
+        // CapacityCheckController
+        this.capacityCheckController = new CapacityCheckController(this.scheduleController);
+        
+        // NoteController
+        this.noteController = new NoteController(this.storageService, this.scheduleController);
+        
+        // ExcelController
+        this.excelController = new ExcelController(
+            this.scheduleController,
+            this.capacityCheckController,
+            this.noteController
+        );
+        
+        this.logger.info('Controllers initialized');
+    }
+
+    /**
+     * コンポーネント層を初期化
+     */
+    initializeComponents() {
+        this.logger.info('Initializing components...');
+        
+        // DOM要素を取得
+        const toolbarContainer = document.getElementById('toolbar');
+        const capacityContainer = document.getElementById('capacity-indicator');
+        const gridContainer = document.getElementById('schedule-grid');
+        
+        if (!toolbarContainer || !capacityContainer || !gridContainer) {
+            throw new Error('Required DOM elements not found');
+        }
+        
+        // Toolbar
+        this.toolbar = new Toolbar(
+            toolbarContainer,
+            this.scheduleController,
+            this.excelController
+        );
+        
+        // CapacityIndicator
+        this.capacityIndicator = new CapacityIndicator(
+            capacityContainer,
+            this.scheduleController,
+            this.capacityCheckController
+        );
+        
+        // ScheduleGrid
+        this.scheduleGrid = new ScheduleGrid(
+            gridContainer,
+            this.scheduleController,
+            this.capacityCheckController
+        );
+        
+        this.logger.info('Components initialized');
+    }
+
+    /**
+     * 初期データを読み込み
+     */
+    async loadInitialData() {
+        this.logger.info('Loading initial data...');
+        
+        try {
+            // 利用者データを読み込み
+            await this.scheduleController.initialize();
+            
+            // 備考データを読み込み
+            await this.noteController.initialize();
+            
+            const users = this.scheduleController.getActiveUsers();
+            
+            if (users.length === 0) {
+                // 利用者がいない場合
+                this.logger.info('No users found, showing empty state');
+                this.showEmptyState();
+            } else {
+                // 利用者がいる場合
+                this.logger.info(`${users.length} users loaded`);
+                
+                // 現在月のスケジュールを読み込み
+                const currentMonth = this.scheduleController.getCurrentYearMonth();
+                await this.scheduleController.loadSchedule(currentMonth);
+            }
+            
+        } catch (error) {
+            this.logger.error('Failed to load initial data:', error);
             throw error;
         }
     }
-    
+
+    // ==================== 状態管理 ====================
+
     /**
-     * コントローラー初期化
+     * 空の状態を表示
      */
-    initControllers() {
-        try {
-            // StorageService と ExcelService のインスタンス作成
-            const storage = new StorageService();
-            const excelService = new ExcelService();
-            
-            // コントローラー初期化
-            this.controllers.schedule = new ScheduleController();
-            this.controllers.capacity = new CapacityCheckController(this.controllers.schedule);
-            this.controllers.note = new NoteController();
-            this.controllers.excel = new ExcelController(this.controllers.schedule);
-            
-            Logger?.info('Controllers initialized');
-        } catch (error) {
-            Logger?.error('Controller initialization failed:', error);
-            throw new Error('コントローラーの初期化に失敗しました: ' + error.message);
+    showEmptyState() {
+        this.logger.info('Showing empty state');
+        
+        // メッセージを表示
+        const messageContainer = document.getElementById('empty-message');
+        if (messageContainer) {
+            messageContainer.style.display = 'block';
+            messageContainer.innerHTML = `
+                <div class="empty-state">
+                    <h2>利用者データがありません</h2>
+                    <p>「算定一覧を取り込む」ボタンからCSVファイルを読み込んでください。</p>
+                </div>
+            `;
         }
     }
-    
+
     /**
-     * 初期データ読み込み
+     * 空の状態を非表示
      */
-    async loadInitialData() {
-        try {
-            // ユーザーデータ読み込み（ScheduleControllerが自動的に行う）
-            // 現在の月のスケジュール読み込み
-            if (DEFAULT_USERS && DEFAULT_USERS.length > 0) {
-                this.controllers.schedule.loadSchedule(DEFAULT_USERS[0].id, this.currentYearMonth);
-            }
-            
-            Logger?.info('Initial data loaded');
-        } catch (error) {
-            Logger?.error('Initial data loading failed:', error);
-            throw new Error('初期データの読み込みに失敗しました: ' + error.message);
+    hideEmptyState() {
+        const messageContainer = document.getElementById('empty-message');
+        if (messageContainer) {
+            messageContainer.style.display = 'none';
         }
     }
-    
+
+    // ==================== ローディング ====================
+
     /**
-     * UIコンポーネント初期化
+     * ローディング表示
+     * @param {string} message - メッセージ
      */
-    initComponents() {
-        try {
-            // CellEditor は全体で1つ
-            this.components.cellEditor = new CellEditor(this);
-            
-            // 各コンポーネントを初期化
-            this.components.toolbar = new Toolbar(this, 'toolbar');
-            this.components.capacityIndicator = new CapacityIndicator(this, 'capacity-indicator');
-            this.components.grid = new ScheduleGrid(this, 'schedule-grid-container');
-            this.components.notePanel = new NotePanel(this);
-            
-            // 各コンポーネントのinit()を呼び出し
-            Object.values(this.components).forEach(component => {
-                if (component.init) {
-                    component.init();
-                }
-            });
-            
-            Logger?.info('Components initialized');
-        } catch (error) {
-            Logger?.error('Component initialization failed:', error);
-            throw new Error('UIコンポーネントの初期化に失敗しました: ' + error.message);
+    showLoading(message = '読み込み中...') {
+        const loadingElement = document.getElementById('loading');
+        if (loadingElement) {
+            loadingElement.textContent = message;
+            loadingElement.style.display = 'block';
         }
     }
-    
+
     /**
-     * イベントリスナー設定
+     * ローディング非表示
      */
-    setupEventListeners() {
-        try {
-            // ScheduleController のイベント
-            this.controllers.schedule.on('cellUpdated', (data) => {
-                Logger?.debug('Cell updated event received:', data);
-                
-                // グリッドと定員表示を更新
-                this.components.grid?.refresh();
-                this.components.capacityIndicator?.refresh();
-                
-                // 更新通知
-                this.showToast('スケジュールを更新しました', 'success');
-            });
-            
-            this.controllers.schedule.on('monthChanged', (data) => {
-                Logger?.debug('Month changed event received:', data);
-                
-                this.currentYearMonth = data.yearMonth;
-                this.render();
-                
-                this.showToast(`${data.yearMonth}に切り替えました`, 'info');
-            });
-            
-            this.controllers.schedule.on('userSwitched', (data) => {
-                Logger?.debug('User switched event received:', data);
-                
-                this.components.grid?.refresh();
-                this.components.capacityIndicator?.refresh();
-            });
-            
-            // NoteController のイベント
-            this.controllers.note.on('noteCreated', (data) => {
-                Logger?.debug('Note created event received:', data);
-                this.showToast('備考を追加しました', 'success');
-            });
-            
-            this.controllers.note.on('noteUpdated', (data) => {
-                Logger?.debug('Note updated event received:', data);
-                this.showToast('備考を更新しました', 'success');
-            });
-            
-            this.controllers.note.on('noteDeleted', (data) => {
-                Logger?.debug('Note deleted event received:', data);
-                this.showToast('備考を削除しました', 'info');
-            });
-            
-            Logger?.info('Event listeners set up');
-        } catch (error) {
-            Logger?.error('Event listener setup failed:', error);
-            throw new Error('イベントリスナーの設定に失敗しました: ' + error.message);
+    hideLoading() {
+        const loadingElement = document.getElementById('loading');
+        if (loadingElement) {
+            loadingElement.style.display = 'none';
         }
     }
-    
+
+    // ==================== エラー処理 ====================
+
     /**
-     * 全コンポーネントを再レンダリング
+     * エラーを表示
+     * @param {string} message - エラーメッセージ
+     * @param {Error} error - エラーオブジェクト
      */
-    render() {
-        try {
-            Logger?.debug('App rendering...');
-            
-            // 各コンポーネントのレンダリング
-            this.components.toolbar?.render();
-            this.components.capacityIndicator?.render();
-            this.components.grid?.render();
-            
-            Logger?.debug('App rendered');
-        } catch (error) {
-            Logger?.error('App rendering failed:', error);
-            this.showError('画面の描画に失敗しました: ' + error.message);
-        }
+    showError(message, error) {
+        this.logger.error(message, error);
+        
+        const errorMessage = error ? `${message}\n\n${error.message}` : message;
+        alert(errorMessage);
+        
+        this.hideLoading();
     }
-    
-    /**
-     * 月切り替え
-     * @param {string} yearMonth - YYYY-MM形式
-     */
-    switchMonth(yearMonth) {
-        try {
-            Logger?.info('Switching to month:', yearMonth);
-            
-            // ScheduleController に月切り替えを依頼
-            this.controllers.schedule.switchMonth(yearMonth);
-            
-        } catch (error) {
-            Logger?.error('Month switch failed:', error);
-            this.showError('月の切り替えに失敗しました: ' + error.message);
-        }
-    }
-    
+
     /**
      * トースト通知を表示
      * @param {string} message - メッセージ
-     * @param {string} type - 'success' | 'warning' | 'error' | 'info'
+     * @param {string} type - 'success' | 'error' | 'warning' | 'info'
      */
     showToast(message, type = 'info') {
-        try {
-            // 既存のトーストを削除
-            const existingToasts = document.querySelectorAll('.toast');
-            existingToasts.forEach(toast => toast.remove());
-            
-            // 新しいトーストを作成
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.textContent = message;
-            
-            // スタイル設定
-            Object.assign(toast.style, {
-                position: 'fixed',
-                top: '20px',
-                right: '20px',
-                padding: '12px 20px',
-                borderRadius: '4px',
-                color: 'white',
-                fontWeight: 'bold',
-                zIndex: '10000',
-                opacity: '0',
-                transition: 'opacity 0.3s ease',
-                maxWidth: '300px',
-                wordWrap: 'break-word'
-            });
-            
-            // タイプ別色設定
-            const colors = {
-                success: '#4CAF50',
-                warning: '#FF9800',
-                error: '#F44336',
-                info: '#2196F3'
-            };
-            toast.style.backgroundColor = colors[type] || colors.info;
-            
-            document.body.appendChild(toast);
-            
-            // フェードイン
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        
+        document.body.appendChild(toast);
+        
+        // アニメーション開始
+        setTimeout(() => {
+            toast.classList.add('show');
+        }, 10);
+        
+        // 自動削除
+        setTimeout(() => {
+            toast.classList.remove('show');
             setTimeout(() => {
-                toast.style.opacity = '1';
-            }, 10);
-            
-            // 3秒後にフェードアウト
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => {
-                    if (toast.parentNode) {
-                        toast.remove();
-                    }
-                }, 300);
-            }, 3000);
-            
-            Logger?.info(`Toast: [${type}] ${message}`);
-        } catch (error) {
-            Logger?.error('Toast display failed:', error);
-            // フォールバック: コンソールに出力
-            console.log(`[${type.toUpperCase()}] ${message}`);
-        }
+                if (toast.parentNode) {
+                    document.body.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
     }
-    
+
+    // ==================== ストレージ情報 ====================
+
     /**
-     * エラートーストを表示
-     * @param {string} message - エラーメッセージ
+     * ストレージ情報をコンソールに出力
      */
-    showError(message) {
-        this.showToast(message, 'error');
+    logStorageInfo() {
+        if (!this.storageService) return;
+        
+        const size = this.storageService.getStorageSizeFormatted();
+        const allMonths = this.storageService.getAllScheduleMonths();
+        
+        this.logger.info('=== Storage Information ===');
+        this.logger.info(`Total Size: ${size}`);
+        this.logger.info(`Saved Months: ${allMonths.join(', ')}`);
     }
-    
+
+    // ==================== デバッグ ====================
+
     /**
-     * 現在の年月を取得
-     * @returns {string} YYYY-MM形式
+     * デバッグ情報を出力
      */
-    getCurrentYearMonth() {
-        return this.currentYearMonth;
-    }
-    
-    /**
-     * コントローラーを取得
-     * @param {string} name - コントローラー名
-     * @returns {object} コントローラー
-     */
-    getController(name) {
-        return this.controllers[name];
-    }
-    
-    /**
-     * コンポーネントを取得
-     * @param {string} name - コンポーネント名
-     * @returns {object} コンポーネント
-     */
-    getComponent(name) {
-        return this.components[name];
-    }
-    
-    /**
-     * デバッグ情報を取得
-     * @returns {object} デバッグ情報
-     */
-    getDebugInfo() {
-        return {
-            isInitialized: this.isInitialized,
-            currentYearMonth: this.currentYearMonth,
-            controllers: Object.keys(this.controllers),
-            components: Object.keys(this.components),
-            users: this.controllers.schedule?.users?.length || 0
-        };
+    debug() {
+        this.logger.info('=== Debug Information ===');
+        this.logger.info('Initialized:', this.initialized);
+        this.logger.info('Current Month:', this.scheduleController?.getCurrentYearMonth());
+        this.logger.info('Users Count:', this.scheduleController?.getSortedUsers().length);
+        
+        this.logStorageInfo();
     }
 }
 
-// グローバルに登録
+// グローバル変数として公開
 window.App = App;
 
-Logger?.info('App class loaded');
+// DOMContentLoaded時に自動初期化
+document.addEventListener('DOMContentLoaded', async () => {
+    const app = new App();
+    await app.initialize();
+    
+    // デバッグ用にグローバルに公開
+    window.app = app;
+    
+    // コンソールにヘルプ表示
+    console.log('%c小規模多機能予定調整システム', 'font-size: 16px; font-weight: bold; color: #0066cc;');
+    console.log('');
+    console.log('利用可能なコマンド:');
+    console.log('  app.debug() - デバッグ情報を表示');
+    console.log('  app.logStorageInfo() - ストレージ情報を表示');
+    console.log('');
+    console.log('グローバル変数:');
+    console.log('  app - アプリケーションインスタンス');
+    console.log('  app.scheduleController - スケジュールコントローラー');
+    console.log('  app.capacityCheckController - 定員チェックコントローラー');
+    console.log('  app.noteController - 備考コントローラー');
+    console.log('');
+});

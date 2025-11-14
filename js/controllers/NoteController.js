@@ -1,531 +1,494 @@
 /**
- * 小規模多機能利用調整システム - NoteController
- * 備考管理を行うコントローラークラス
- * EventEmitterを継承
+ * NoteControllerクラス（備考コントローラー）
+ * 利用者備考とセル備考の管理を担当
  */
-
-class NoteController extends EventEmitter {
-  /**
-   * コンストラクタ
-   * @param {StorageService} storageService - ストレージサービス
-   */
-  constructor(storageService) {
-    super();
-
-    // 依存関係チェック
-    if (typeof window.Logger === 'undefined') {
-      throw new Error('NoteController requires Logger');
-    }
-    if (typeof window.EventEmitter === 'undefined') {
-      throw new Error('NoteController requires EventEmitter');
-    }
-    if (typeof window.StorageService === 'undefined') {
-      throw new Error('NoteController requires StorageService');
-    }
-    if (typeof window.Note === 'undefined') {
-      throw new Error('NoteController requires Note model');
+class NoteController {
+    /**
+     * コンストラクタ
+     * @param {StorageService} storageService - ストレージサービス
+     * @param {ScheduleController} scheduleController - スケジュールコントローラー
+     */
+    constructor(storageService, scheduleController) {
+        this.storageService = storageService;
+        this.scheduleController = scheduleController;
+        this.notes = [];
+        this.eventEmitter = new EventEmitter();
+        this.logger = new Logger('NoteController');
     }
 
-    this.storageService = storageService;
-    this.notes = new Map();
+    // ==================== 初期化 ====================
 
-    window.Logger?.info('NoteController initialized');
-  }
-
-  /**
-   * 備考データを読み込み
-   */
-  loadNotes() {
-    try {
-      const noteArray = this.storageService.loadNotes();
-
-      this.notes.clear();
-      noteArray.forEach(note => {
-        this.notes.set(note.id, note);
-      });
-
-      window.Logger?.info('Loaded notes:', this.notes.size);
-    } catch (error) {
-      window.Logger?.error('Failed to load notes:', error);
-      this.notes.clear();
-    }
-  }
-
-  /**
-   * 備考データを保存
-   * @returns {boolean} 成功かどうか
-   */
-  saveNotes() {
-    try {
-      const noteArray = Array.from(this.notes.values());
-      const success = this.storageService.saveNotes(noteArray);
-
-      if (success) {
-        window.Logger?.debug('Notes saved:', noteArray.length);
-      }
-
-      return success;
-    } catch (error) {
-      window.Logger?.error('Failed to save notes:', error);
-      return false;
-    }
-  }
-
-  /**
-   * IDから備考を取得
-   * @param {string} id - 備考ID
-   * @returns {Note|null} 備考またはnull
-   */
-  getNote(id) {
-    return this.notes.get(id) || null;
-  }
-
-  /**
-   * 利用者の備考を取得
-   * @param {string} userId - 利用者ID
-   * @returns {Note|null} 備考またはnull
-   */
-  getUserNote(userId) {
-    try {
-      for (const note of this.notes.values()) {
-        if (note.targetType === 'user' && note.targetId === userId) {
-          return note;
+    /**
+     * 初期化
+     */
+    async initialize() {
+        try {
+            await this.loadNotes();
+            this.logger.info('NoteController initialized');
+        } catch (error) {
+            this.logger.error('Failed to initialize:', error);
+            throw error;
         }
-      }
-      return null;
-    } catch (error) {
-      window.Logger?.error('Failed to get user note:', error);
-      return null;
     }
-  }
 
-  /**
-   * セルの備考を取得
-   * @param {string} cellId - セルID（userId_date_cellType形式）
-   * @returns {Note|null} 備考またはnull
-   */
-  getCellNote(cellId) {
-    try {
-      for (const note of this.notes.values()) {
-        if (note.targetType === 'cell' && note.targetId === cellId) {
-          return note;
+    // ==================== 備考の読み込み・保存 ====================
+
+    /**
+     * 備考を読み込み
+     */
+    async loadNotes() {
+        try {
+            this.notes = await this.storageService.loadNotes();
+            this.logger.info(`Notes loaded: ${this.notes.length} notes`);
+            this.eventEmitter.emit('notes:loaded', this.notes);
+            
+        } catch (error) {
+            this.logger.error('Failed to load notes:', error);
+            this.eventEmitter.emit('notes:error', error);
+            throw error;
         }
-      }
-      return null;
-    } catch (error) {
-      window.Logger?.error('Failed to get cell note:', error);
-      return null;
     }
-  }
 
-  /**
-   * 利用者の全備考を取得
-   * @param {string} userId - 利用者ID
-   * @returns {Note[]} 備考配列
-   */
-  getUserNotes(userId) {
-    try {
-      const userNotes = [];
-      
-      for (const note of this.notes.values()) {
-        if (note.targetType === 'user' && note.targetId === userId) {
-          userNotes.push(note);
+    /**
+     * 備考を保存
+     */
+    async saveNotes() {
+        try {
+            await this.storageService.saveNotes(this.notes);
+            this.logger.info(`Notes saved: ${this.notes.length} notes`);
+            this.eventEmitter.emit('notes:saved', this.notes);
+            
+            // 自動保存が有効な場合は通知しない
+            if (!AppConfig.STORAGE.AUTO_SAVE) {
+                this.logger.debug('Auto save is disabled');
+            }
+            
+        } catch (error) {
+            this.logger.error('Failed to save notes:', error);
+            this.eventEmitter.emit('notes:error', error);
+            throw error;
         }
-      }
-      
-      // 更新日時順にソート（新しい順）
-      userNotes.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-      
-      return userNotes;
-    } catch (error) {
-      window.Logger?.error('Failed to get user notes:', error);
-      return [];
     }
-  }
 
-  /**
-   * 指定日の全セル備考を取得
-   * @param {string} userId - 利用者ID
-   * @param {Date} date - 日付
-   * @returns {Object} セルタイプをキーとした備考のオブジェクト
-   */
-  getDayNotes(userId, date) {
-    try {
-      const dateStr = window.DateUtils.formatDate(date);
-      const dayStayCellId = `${userId}_${dateStr}_dayStay`;
-      const visitCellId = `${userId}_${dateStr}_visit`;
+    // ==================== 利用者備考 ====================
 
-      return {
-        dayStay: this.getCellNote(dayStayCellId),
-        visit: this.getCellNote(visitCellId)
-      };
-    } catch (error) {
-      window.Logger?.error('Failed to get day notes:', error);
-      return {
-        dayStay: null,
-        visit: null
-      };
-    }
-  }
-
-  /**
-   * 全備考の配列を返す
-   * @returns {Note[]} 備考配列
-   */
-  getAllNotes() {
-    try {
-      const noteArray = Array.from(this.notes.values());
-      
-      // 更新日時順にソート（新しい順）
-      noteArray.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-      
-      return noteArray;
-    } catch (error) {
-      window.Logger?.error('Failed to get all notes:', error);
-      return [];
-    }
-  }
-
-  /**
-   * 備考を追加
-   * @param {Note} note - 追加する備考
-   * @returns {boolean} 成功かどうか
-   */
-  addNote(note) {
-    try {
-      if (!(note instanceof window.Note)) {
-        throw new Error('Invalid note object');
-      }
-
-      this.notes.set(note.id, note);
-      this.emit('noteAdded', { note });
-      this.saveNotes();
-
-      window.Logger?.debug('Note added:', note.id);
-      return true;
-    } catch (error) {
-      window.Logger?.error('Failed to add note:', error);
-      return false;
-    }
-  }
-
-  /**
-   * 備考内容を更新
-   * @param {string} id - 備考ID
-   * @param {string} content - 新しい内容
-   * @returns {boolean} 成功かどうか
-   */
-  updateNote(id, content) {
-    try {
-      const note = this.notes.get(id);
-      if (!note) {
-        window.Logger?.error('Note not found:', id);
-        return false;
-      }
-
-      // Note.update()メソッドを使用
-      if (typeof note.update === 'function') {
-        note.update(content);
-      } else {
-        // fallback: 直接更新
-        note.content = content;
-        note.updatedAt = new Date();
-      }
-
-      this.emit('noteUpdated', { note });
-      this.saveNotes();
-
-      window.Logger?.debug('Note updated:', id);
-      return true;
-    } catch (error) {
-      window.Logger?.error('Failed to update note:', error);
-      return false;
-    }
-  }
-
-  /**
-   * 備考を削除
-   * @param {string} id - 備考ID
-   * @returns {boolean} 成功かどうか
-   */
-  deleteNote(id) {
-    try {
-      const note = this.notes.get(id);
-      if (!note) {
-        window.Logger?.error('Note not found:', id);
-        return false;
-      }
-
-      this.notes.delete(id);
-      this.emit('noteDeleted', { noteId: id, note: note });
-      this.saveNotes();
-
-      window.Logger?.debug('Note deleted:', id);
-      return true;
-    } catch (error) {
-      window.Logger?.error('Failed to delete note:', error);
-      return false;
-    }
-  }
-
-  /**
-   * 指定ターゲットに備考があるか
-   * @param {string} targetType - ターゲットタイプ（'user' | 'cell'）
-   * @param {string} targetId - ターゲットID
-   * @returns {boolean} 備考があるかどうか
-   */
-  hasNote(targetType, targetId) {
-    try {
-      for (const note of this.notes.values()) {
-        if (note.targetType === targetType && note.targetId === targetId) {
-          return true;
+    /**
+     * 利用者備考を作成
+     * @param {string} userId - 利用者ID
+     * @param {string} content - 備考内容
+     * @returns {Note}
+     */
+    async createUserNote(userId, content) {
+        try {
+            // 利用者が存在するかチェック
+            const user = this.scheduleController.getUserById(userId);
+            if (!user) {
+                throw new Error(`User not found: ${userId}`);
+            }
+            
+            const note = Note.createUserNote(userId, content);
+            this.notes.push(note);
+            
+            await this.saveNotes();
+            
+            this.logger.info(`User note created: ${note.id}`);
+            this.eventEmitter.emit('note:created', note);
+            
+            return note;
+            
+        } catch (error) {
+            this.logger.error('Failed to create user note:', error);
+            this.eventEmitter.emit('note:error', error);
+            throw error;
         }
-      }
-      return false;
-    } catch (error) {
-      window.Logger?.error('Failed to check note existence:', error);
-      return false;
-    }
-  }
-
-  /**
-   * 新しいNoteインスタンスを生成して追加
-   * @param {string} targetType - ターゲットタイプ（'user' | 'cell'）
-   * @param {string} targetId - ターゲットID
-   * @param {string} content - 内容
-   * @returns {Note|null} 作成した備考またはnull
-   */
-  createNote(targetType, targetId, content) {
-    try {
-      const note = new window.Note({ targetType, targetId, content });
-      const success = this.addNote(note);
-      
-      if (success) {
-        return note;
-      } else {
-        return null;
-      }
-    } catch (error) {
-      window.Logger?.error('Failed to create note:', error);
-      return null;
-    }
-  }
-
-  /**
-   * セル備考を作成（ヘルパーメソッド）
-   * @param {string} userId - 利用者ID
-   * @param {Date} date - 日付
-   * @param {string} cellType - セルタイプ（'dayStay' | 'visit'）
-   * @param {string} content - 内容
-   * @returns {Note|null} 作成した備考またはnull
-   */
-  createCellNote(userId, date, cellType, content) {
-    try {
-      const dateStr = window.DateUtils.formatDate(date);
-      const cellId = `${userId}_${dateStr}_${cellType}`;
-      
-      return this.createNote('cell', cellId, content);
-    } catch (error) {
-      window.Logger?.error('Failed to create cell note:', error);
-      return null;
-    }
-  }
-
-  /**
-   * 一括削除
-   * @param {string} targetType - ターゲットタイプ（省略時は全て）
-   * @param {string} targetId - ターゲットID（省略時は指定タイプの全て）
-   * @returns {number} 削除した件数
-   */
-  bulkDelete(targetType = null, targetId = null) {
-    try {
-      let deleteCount = 0;
-      const toDelete = [];
-
-      for (const [id, note] of this.notes.entries()) {
-        let shouldDelete = true;
-
-        if (targetType && note.targetType !== targetType) {
-          shouldDelete = false;
-        }
-        if (targetId && note.targetId !== targetId) {
-          shouldDelete = false;
-        }
-
-        if (shouldDelete) {
-          toDelete.push(id);
-        }
-      }
-
-      // 削除実行
-      toDelete.forEach(id => {
-        const note = this.notes.get(id);
-        this.notes.delete(id);
-        this.emit('noteDeleted', { noteId: id, note: note });
-        deleteCount++;
-      });
-
-      if (deleteCount > 0) {
-        this.saveNotes();
-        window.Logger?.info(`Bulk deleted ${deleteCount} notes`);
-      }
-
-      return deleteCount;
-    } catch (error) {
-      window.Logger?.error('Failed to bulk delete notes:', error);
-      return 0;
-    }
-  }
-
-  /**
-   * 検索
-   * @param {string} searchText - 検索テキスト
-   * @param {Object} options - 検索オプション
-   * @returns {Note[]} 検索結果
-   */
-  search(searchText, options = {}) {
-    try {
-      if (!searchText || typeof searchText !== 'string') {
-        return [];
-      }
-
-      const {
-        targetType = null,
-        caseSensitive = false,
-        exactMatch = false
-      } = options;
-
-      const searchPattern = caseSensitive ? searchText : searchText.toLowerCase();
-      const results = [];
-
-      for (const note of this.notes.values()) {
-        // ターゲットタイプフィルター
-        if (targetType && note.targetType !== targetType) {
-          continue;
-        }
-
-        // 内容検索
-        const content = caseSensitive ? note.content : note.content.toLowerCase();
-        let matches = false;
-
-        if (exactMatch) {
-          matches = content === searchPattern;
-        } else {
-          matches = content.includes(searchPattern);
-        }
-
-        if (matches) {
-          results.push(note);
-        }
-      }
-
-      // 関連性順にソート（完全一致 > 前方一致 > 部分一致）
-      results.sort((a, b) => {
-        const aContent = caseSensitive ? a.content : a.content.toLowerCase();
-        const bContent = caseSensitive ? b.content : b.content.toLowerCase();
-
-        const aExact = aContent === searchPattern ? 3 : 0;
-        const bExact = bContent === searchPattern ? 3 : 0;
-        const aPrefix = aContent.startsWith(searchPattern) ? 2 : 0;
-        const bPrefix = bContent.startsWith(searchPattern) ? 2 : 0;
-        const aPartial = aContent.includes(searchPattern) ? 1 : 0;
-        const bPartial = bContent.includes(searchPattern) ? 1 : 0;
-
-        const aScore = aExact + aPrefix + aPartial;
-        const bScore = bExact + bPrefix + bPartial;
-
-        if (aScore !== bScore) {
-          return bScore - aScore; // 高スコア順
-        }
-
-        // 同スコアの場合は更新日時順
-        return new Date(b.updatedAt) - new Date(a.updatedAt);
-      });
-
-      window.Logger?.debug(`Search for "${searchText}" found ${results.length} results`);
-      return results;
-    } catch (error) {
-      window.Logger?.error('Failed to search notes:', error);
-      return [];
-    }
-  }
-
-  /**
-   * 統計情報を取得
-   * @returns {Object} 統計情報
-   */
-  getStatistics() {
-    try {
-      const stats = {
-        total: this.notes.size,
-        byTargetType: {
-          user: 0,
-          cell: 0
-        },
-        byMonth: {},
-        averageLength: 0,
-        totalLength: 0
-      };
-
-      let totalLength = 0;
-
-      for (const note of this.notes.values()) {
-        // タイプ別集計
-        if (stats.byTargetType.hasOwnProperty(note.targetType)) {
-          stats.byTargetType[note.targetType]++;
-        }
-
-        // 月別集計
-        const month = note.createdAt.toISOString().substring(0, 7); // YYYY-MM
-        stats.byMonth[month] = (stats.byMonth[month] || 0) + 1;
-
-        // 長さ集計
-        totalLength += note.content.length;
-      }
-
-      stats.totalLength = totalLength;
-      stats.averageLength = stats.total > 0 ? Math.round(totalLength / stats.total) : 0;
-
-      return stats;
-    } catch (error) {
-      window.Logger?.error('Failed to get statistics:', error);
-      return {
-        total: 0,
-        byTargetType: { user: 0, cell: 0 },
-        byMonth: {},
-        averageLength: 0,
-        totalLength: 0
-      };
-    }
-  }
-
-  /**
-   * デバッグ情報を出力
-   */
-  debug() {
-    window.Logger?.group('NoteController Debug Info');
-    
-    const stats = this.getStatistics();
-    const recentNotes = this.getAllNotes().slice(0, 5);
-
-    window.Logger?.info('Total Notes:', this.notes.size);
-    window.Logger?.info('Statistics:', stats);
-
-    if (recentNotes.length > 0) {
-      window.Logger?.info('Recent Notes:');
-      const recentData = recentNotes.map(note => ({
-        id: note.id.substring(0, 8) + '...',
-        targetType: note.targetType,
-        targetId: note.targetId.substring(0, 12) + '...',
-        content: note.content.substring(0, 30) + (note.content.length > 30 ? '...' : ''),
-        updatedAt: note.updatedAt.toISOString().substring(0, 19)
-      }));
-      window.Logger?.table(recentData);
     }
 
-    window.Logger?.groupEnd();
-  }
+    /**
+     * 利用者備考を取得
+     * @param {string} userId - 利用者ID
+     * @returns {Array<Note>}
+     */
+    getUserNotes(userId) {
+        return Note.filterUserNotes(this.notes, userId);
+    }
+
+    /**
+     * 利用者備考を更新
+     * @param {string} userId - 利用者ID
+     * @param {string} content - 備考内容
+     * @returns {Note}
+     */
+    async updateUserNote(userId, content) {
+        try {
+            const notes = this.getUserNotes(userId);
+            
+            if (notes.length === 0) {
+                // 備考がない場合は新規作成
+                return await this.createUserNote(userId, content);
+            }
+            
+            // 最新の備考を更新
+            const note = notes[notes.length - 1];
+            note.setContent(content);
+            
+            await this.saveNotes();
+            
+            this.logger.info(`User note updated: ${note.id}`);
+            this.eventEmitter.emit('note:updated', note);
+            
+            return note;
+            
+        } catch (error) {
+            this.logger.error('Failed to update user note:', error);
+            this.eventEmitter.emit('note:error', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 利用者備考を削除
+     * @param {string} userId - 利用者ID
+     */
+    async deleteUserNote(userId) {
+        try {
+            const beforeCount = this.notes.length;
+            this.notes = this.notes.filter(note => {
+                if (note.isUserNote() && note.targetId === userId) {
+                    return false;
+                }
+                return true;
+            });
+            
+            const deletedCount = beforeCount - this.notes.length;
+            
+            if (deletedCount > 0) {
+                await this.saveNotes();
+                this.logger.info(`User notes deleted: ${deletedCount} notes for user ${userId}`);
+                this.eventEmitter.emit('note:deleted', { userId, count: deletedCount });
+            }
+            
+        } catch (error) {
+            this.logger.error('Failed to delete user note:', error);
+            this.eventEmitter.emit('note:error', error);
+            throw error;
+        }
+    }
+
+    // ==================== セル備考 ====================
+
+    /**
+     * セル備考を作成
+     * @param {string} userId - 利用者ID
+     * @param {string} date - "YYYY-MM-DD"形式
+     * @param {string} cellType - 'prevMonth' | 'am' | 'pm' | 'nextMonth'
+     * @param {string} content - 備考内容
+     * @returns {Note}
+     */
+    async createCellNote(userId, date, cellType, content) {
+        try {
+            // セルが存在するかチェック
+            const cell = this.scheduleController.getCell(userId, date, cellType);
+            if (!cell) {
+                throw new Error(`Cell not found: ${userId} ${date} ${cellType}`);
+            }
+            
+            const note = Note.createCellNote(userId, date, cellType, content);
+            this.notes.push(note);
+            
+            await this.saveNotes();
+            
+            this.logger.info(`Cell note created: ${note.id}`);
+            this.eventEmitter.emit('note:created', note);
+            
+            return note;
+            
+        } catch (error) {
+            this.logger.error('Failed to create cell note:', error);
+            this.eventEmitter.emit('note:error', error);
+            throw error;
+        }
+    }
+
+    /**
+     * セル備考を取得
+     * @param {string} userId - 利用者ID
+     * @param {string} date - "YYYY-MM-DD"形式
+     * @param {string} cellType - 'prevMonth' | 'am' | 'pm' | 'nextMonth'
+     * @returns {Array<Note>}
+     */
+    getCellNotes(userId, date, cellType) {
+        return Note.filterCellNotes(this.notes, userId, date, cellType);
+    }
+
+    /**
+     * セル備考を更新
+     * @param {string} userId - 利用者ID
+     * @param {string} date - "YYYY-MM-DD"形式
+     * @param {string} cellType - 'prevMonth' | 'am' | 'pm' | 'nextMonth'
+     * @param {string} content - 備考内容
+     * @returns {Note}
+     */
+    async updateCellNote(userId, date, cellType, content) {
+        try {
+            const notes = this.getCellNotes(userId, date, cellType);
+            
+            if (notes.length === 0) {
+                // 備考がない場合は新規作成
+                return await this.createCellNote(userId, date, cellType, content);
+            }
+            
+            // 最新の備考を更新
+            const note = notes[notes.length - 1];
+            note.setContent(content);
+            
+            await this.saveNotes();
+            
+            this.logger.info(`Cell note updated: ${note.id}`);
+            this.eventEmitter.emit('note:updated', note);
+            
+            return note;
+            
+        } catch (error) {
+            this.logger.error('Failed to update cell note:', error);
+            this.eventEmitter.emit('note:error', error);
+            throw error;
+        }
+    }
+
+    /**
+     * セル備考を削除
+     * @param {string} userId - 利用者ID
+     * @param {string} date - "YYYY-MM-DD"形式
+     * @param {string} cellType - 'prevMonth' | 'am' | 'pm' | 'nextMonth'
+     */
+    async deleteCellNote(userId, date, cellType) {
+        try {
+            const beforeCount = this.notes.length;
+            this.notes = this.notes.filter(note => {
+                if (note.isCellNote()) {
+                    const target = note.parseCellTarget();
+                    if (target.userId === userId && 
+                        target.date === date && 
+                        target.cellType === cellType) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+            
+            const deletedCount = beforeCount - this.notes.length;
+            
+            if (deletedCount > 0) {
+                await this.saveNotes();
+                this.logger.info(`Cell notes deleted: ${deletedCount} notes for ${userId} ${date} ${cellType}`);
+                this.eventEmitter.emit('note:deleted', { userId, date, cellType, count: deletedCount });
+            }
+            
+        } catch (error) {
+            this.logger.error('Failed to delete cell note:', error);
+            this.eventEmitter.emit('note:error', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 利用者の全セル備考を削除
+     * @param {string} userId - 利用者ID
+     */
+    async deleteUserCellNotes(userId) {
+        try {
+            const beforeCount = this.notes.length;
+            this.notes = this.notes.filter(note => {
+                if (note.isCellNote()) {
+                    const target = note.parseCellTarget();
+                    if (target.userId === userId) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+            
+            const deletedCount = beforeCount - this.notes.length;
+            
+            if (deletedCount > 0) {
+                await this.saveNotes();
+                this.logger.info(`All cell notes deleted for user: ${userId} (${deletedCount} notes)`);
+                this.eventEmitter.emit('note:deleted', { userId, count: deletedCount });
+            }
+            
+        } catch (error) {
+            this.logger.error('Failed to delete user cell notes:', error);
+            this.eventEmitter.emit('note:error', error);
+            throw error;
+        }
+    }
+
+    // ==================== 検索・取得 ====================
+
+    /**
+     * IDで備考を取得
+     * @param {string} id - 備考ID
+     * @returns {Note|null}
+     */
+    getNoteById(id) {
+        return this.notes.find(note => note.id === id) || null;
+    }
+
+    /**
+     * すべての備考を取得
+     * @returns {Array<Note>}
+     */
+    getAllNotes() {
+        return [...this.notes];
+    }
+
+    /**
+     * すべての利用者備考を取得
+     * @returns {Array<Note>}
+     */
+    getAllUserNotes() {
+        return this.notes.filter(note => note.isUserNote());
+    }
+
+    /**
+     * すべてのセル備考を取得
+     * @returns {Array<Note>}
+     */
+    getAllCellNotes() {
+        return this.notes.filter(note => note.isCellNote());
+    }
+
+    /**
+     * 指定期間のセル備考を取得
+     * @param {string} startDate - "YYYY-MM-DD"形式
+     * @param {string} endDate - "YYYY-MM-DD"形式
+     * @returns {Array<Note>}
+     */
+    getCellNotesInRange(startDate, endDate) {
+        return this.notes.filter(note => {
+            if (!note.isCellNote()) {
+                return false;
+            }
+            
+            const target = note.parseCellTarget();
+            return target.date >= startDate && target.date <= endDate;
+        });
+    }
+
+    /**
+     * キーワードで備考を検索
+     * @param {string} keyword - 検索キーワード
+     * @returns {Array<Note>}
+     */
+    searchNotes(keyword) {
+        if (!keyword) {
+            return [];
+        }
+        
+        const lowerKeyword = keyword.toLowerCase();
+        return this.notes.filter(note => {
+            return note.content.toLowerCase().includes(lowerKeyword);
+        });
+    }
+
+    // ==================== 統計・集計 ====================
+
+    /**
+     * 備考の統計情報を取得
+     * @returns {object}
+     */
+    getStatistics() {
+        const userNotes = this.getAllUserNotes();
+        const cellNotes = this.getAllCellNotes();
+        
+        return {
+            total: this.notes.length,
+            userNotes: userNotes.length,
+            cellNotes: cellNotes.length,
+            averageLength: this.notes.reduce((sum, note) => sum + note.content.length, 0) / this.notes.length || 0
+        };
+    }
+
+    /**
+     * 備考が多い利用者を取得
+     * @param {number} limit - 取得件数
+     * @returns {Array<object>}
+     */
+    getTopNotedUsers(limit = 10) {
+        const userNoteCounts = new Map();
+        
+        this.notes.forEach(note => {
+            let userId;
+            if (note.isUserNote()) {
+                userId = note.targetId;
+            } else if (note.isCellNote()) {
+                const target = note.parseCellTarget();
+                userId = target.userId;
+            }
+            
+            if (userId) {
+                userNoteCounts.set(userId, (userNoteCounts.get(userId) || 0) + 1);
+            }
+        });
+        
+        const result = Array.from(userNoteCounts.entries())
+            .map(([userId, count]) => {
+                const user = this.scheduleController.getUserById(userId);
+                return {
+                    userId,
+                    userName: user ? user.name : '不明',
+                    noteCount: count
+                };
+            })
+            .sort((a, b) => b.noteCount - a.noteCount)
+            .slice(0, limit);
+        
+        return result;
+    }
+
+    // ==================== クリア ====================
+
+    /**
+     * すべての備考をクリア
+     */
+    async clearAllNotes() {
+        try {
+            const count = this.notes.length;
+            this.notes = [];
+            
+            await this.saveNotes();
+            
+            this.logger.info(`All notes cleared: ${count} notes`);
+            this.eventEmitter.emit('notes:cleared', count);
+            
+        } catch (error) {
+            this.logger.error('Failed to clear notes:', error);
+            this.eventEmitter.emit('notes:error', error);
+            throw error;
+        }
+    }
+
+    // ==================== イベント管理 ====================
+
+    /**
+     * イベントリスナーを登録
+     * @param {string} eventName - イベント名
+     * @param {Function} callback - コールバック関数
+     * @returns {Function} 登録解除関数
+     */
+    on(eventName, callback) {
+        return this.eventEmitter.on(eventName, callback);
+    }
+
+    /**
+     * イベントリスナーを解除
+     * @param {string} eventName - イベント名
+     * @param {Function} callback - コールバック関数
+     */
+    off(eventName, callback) {
+        this.eventEmitter.off(eventName, callback);
+    }
 }
 
-// グローバルに登録
+// グローバル変数として公開
 window.NoteController = NoteController;

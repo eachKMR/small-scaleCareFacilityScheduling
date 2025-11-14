@@ -5,67 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>小規模多機能利用調整システム</title>
     
-    <!-- External Libraries -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-    
-    <!-- CSS Files -->
-    <link rel="stylesheet" href="css/variables.css">
+    <!-- CSS -->
     <link rel="stylesheet" href="css/reset.css">
-    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/layout.css">
     <link rel="stylesheet" href="css/components.css">
-    <link rel="stylesheet" href="css/toolbar.css">
-    <link rel="stylesheet" href="css/grid.css">
-    <link rel="stylesheet" href="css/modal.css">
-    <link rel="stylesheet" href="css/note-panel.css">
-    <link rel="stylesheet" href="css/capacity-indicator.css">
+    <link rel="stylesheet" href="css/themes.css">
 </head>
 <body>
     <div id="app">
+        <!-- ローディング -->
+        <div id="loading" class="loading" style="display: none;">読み込み中...</div>
+        
+        <!-- 空の状態メッセージ -->
+        <div id="empty-message" style="display: none;"></div>
+        
+        <!-- ツールバー -->
         <div id="toolbar"></div>
+        
+        <!-- 定員状況ヘッダー -->
         <div id="capacity-indicator"></div>
-        <div id="schedule-grid-container"></div>
+        
+        <!-- 予定グリッド -->
+        <div id="schedule-grid"></div>
     </div>
 
-    <!-- JavaScript Files - 依存関係順に読み込み -->
-    <script src="js/config.js"></script>
-    
-    <!-- Utils -->
+    <!-- 外部ライブラリ（Excel操作用） -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+    <!-- 設定 -->
+    <script src="js/config/AppConfig.js"></script>
+
+    <!-- ユーティリティ -->
     <script src="js/utils/Logger.js"></script>
     <script src="js/utils/EventEmitter.js"></script>
-    <script src="js/utils/DateUtils.js"></script>
     <script src="js/utils/IdGenerator.js"></script>
-    
-    <!-- Data -->
-    <script src="js/data/users.js"></script>
-    
-    <!-- Domain Models - 依存関係順 -->
+    <script src="js/utils/DateUtils.js"></script>
+    <script src="js/utils/Validator.js"></script>
+
+    <!-- モデル -->
     <script src="js/models/User.js"></script>
-    <script src="js/models/Note.js"></script>
     <script src="js/models/ScheduleCell.js"></script>
     <script src="js/models/StayPeriod.js"></script>
     <script src="js/models/ScheduleCalendar.js"></script>
     <script src="js/models/DailyCapacity.js"></script>
     <script src="js/models/ServiceCapacity.js"></script>
-    
-    <!-- Services -->
+    <script src="js/models/Note.js"></script>
+
+    <!-- サービス -->
     <script src="js/services/StorageService.js"></script>
     <script src="js/services/ExcelService.js"></script>
-    
-    <!-- Controllers -->
+    <script src="js/services/CSVService.js"></script>
+
+    <!-- コントローラー -->
     <script src="js/controllers/ScheduleController.js"></script>
     <script src="js/controllers/CapacityCheckController.js"></script>
     <script src="js/controllers/NoteController.js"></script>
     <script src="js/controllers/ExcelController.js"></script>
-    
-    <!-- Components -->
+
+    <!-- コンポーネント -->
     <script src="js/components/CellEditor.js"></script>
     <script src="js/components/ScheduleGrid.js"></script>
-    <script src="js/components/Toolbar.js"></script>
-    <script src="js/components/CapacityIndicator.js"></script>
     <script src="js/components/NotePanel.js"></script>
+    <script src="js/components/CapacityIndicator.js"></script>
+    <script src="js/components/Toolbar.js"></script>
     <script src="js/components/App.js"></script>
-    
-    <!-- Main -->
+
+    <!-- アプリケーション起動 -->
     <script src="js/main.js"></script>
 </body>
 </html>

@@ -1,342 +1,305 @@
 /**
- * 小規模多機能利用調整システム - Noteモデル
- * 備考を表すモデルクラス
+ * Noteクラス（備考）
+ * 利用者備考とセル備考を管理
  */
-
 class Note {
-  /**
-   * Noteコンストラクタ
-   * @param {Object} data - 備考データ
-   * @param {string} data.id - 備考ID（省略時は自動生成）
-   * @param {string} data.targetType - 対象タイプ（"user" | "cell"）
-   * @param {string} data.targetId - 対象のID
-   * @param {string} data.content - 備考内容
-   * @param {Date|string} data.createdAt - 作成日時
-   * @param {Date|string} data.updatedAt - 更新日時
-   */
-  constructor(data = {}) {
-    // 依存関係チェック
-    if (typeof window.IdGenerator === 'undefined') {
-      throw new Error('Note model requires IdGenerator utility');
-    }
-    if (typeof window.DateUtils === 'undefined') {
-      throw new Error('Note model requires DateUtils utility');
-    }
-
-    // プロパティの初期化
-    this.id = data.id || window.IdGenerator.generate('note');
-    this.targetType = data.targetType || '';
-    this.targetId = data.targetId || '';
-    this.content = data.content || '';
-
-    // 日時の処理
-    const now = new Date();
-    
-    // createdAtの処理
-    if (data.createdAt) {
-      this.createdAt = this._parseDateTime(data.createdAt);
-    } else {
-      this.createdAt = new Date(now);
-    }
-
-    // updatedAtの処理
-    if (data.updatedAt) {
-      this.updatedAt = this._parseDateTime(data.updatedAt);
-    } else {
-      this.updatedAt = new Date(now);
-    }
-
-    // バリデーション
-    this._validate();
-  }
-
-  /**
-   * 日時文字列をDateオブジェクトに変換
-   * @param {Date|string} dateTime - 変換する日時
-   * @returns {Date} Dateオブジェクト
-   * @private
-   */
-  _parseDateTime(dateTime) {
-    if (dateTime instanceof Date) {
-      return new Date(dateTime);
-    }
-
-    if (typeof dateTime === 'string') {
-      try {
-        // ISO形式の場合
-        if (dateTime.includes('T') || dateTime.includes('Z')) {
-          const parsed = new Date(dateTime);
-          if (!isNaN(parsed.getTime())) {
-            return parsed;
-          }
-        }
+    /**
+     * コンストラクタ
+     * @param {object} data - 備考データ
+     */
+    constructor(data = {}) {
+        this.id = data.id || IdGenerator.noteId();
+        this.targetType = data.targetType || 'user';  // 'user' | 'cell'
+        this.targetId = data.targetId || '';
+        this.content = data.content || '';
+        this.createdAt = data.createdAt || new Date().toISOString();
+        this.updatedAt = data.updatedAt || new Date().toISOString();
         
-        // YYYY-MM-DD形式の場合（時刻は00:00:00）
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dateTime)) {
-          return window.DateUtils.parseDate(dateTime);
+        this.logger = new Logger('Note');
+    }
+
+    /**
+     * 利用者備考かどうか
+     * @returns {boolean}
+     */
+    isUserNote() {
+        return this.targetType === 'user';
+    }
+
+    /**
+     * セル備考かどうか
+     * @returns {boolean}
+     */
+    isCellNote() {
+        return this.targetType === 'cell';
+    }
+
+    /**
+     * 備考が空かどうか
+     * @returns {boolean}
+     */
+    isEmpty() {
+        return !this.content || this.content.trim().length === 0;
+    }
+
+    /**
+     * 備考内容を設定
+     * @param {string} content - 備考内容
+     * @returns {object} {valid: boolean, message: string}
+     */
+    setContent(content) {
+        const validation = Validator.validateNote(content);
+        
+        if (!validation.valid) {
+            return validation;
         }
 
-        // その他の形式を試行
-        const parsed = new Date(dateTime);
-        if (!isNaN(parsed.getTime())) {
-          return parsed;
+        this.content = content;
+        this.updatedAt = new Date().toISOString();
+        
+        this.logger.debug(`Note content updated: ${this.id}`);
+        
+        return { valid: true, message: '' };
+    }
+
+    /**
+     * 備考を削除（内容をクリア）
+     */
+    clear() {
+        this.content = '';
+        this.updatedAt = new Date().toISOString();
+        
+        this.logger.debug(`Note cleared: ${this.id}`);
+    }
+
+    /**
+     * 作成日時を取得
+     * @returns {Date}
+     */
+    getCreatedDate() {
+        return new Date(this.createdAt);
+    }
+
+    /**
+     * 更新日時を取得
+     * @returns {Date}
+     */
+    getUpdatedDate() {
+        return new Date(this.updatedAt);
+    }
+
+    /**
+     * 作成日時の文字列表現
+     * @returns {string} 例: "2025-11-14 22:30:15"
+     */
+    getCreatedDateString() {
+        const date = this.getCreatedDate();
+        return `${DateUtils.formatDate(date)} ${this._formatTime(date)}`;
+    }
+
+    /**
+     * 更新日時の文字列表現
+     * @returns {string}
+     */
+    getUpdatedDateString() {
+        const date = this.getUpdatedDate();
+        return `${DateUtils.formatDate(date)} ${this._formatTime(date)}`;
+    }
+
+    /**
+     * 時刻をフォーマット
+     * @param {Date} date - 日付
+     * @returns {string} "HH:MM:SS"形式
+     * @private
+     */
+    _formatTime(date) {
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        return `${hours}:${minutes}:${seconds}`;
+    }
+
+    /**
+     * セルIDから対象情報を解析
+     * @returns {object|null} {userId: string, date: string, cellType: string}
+     */
+    parseCellTarget() {
+        if (!this.isCellNote()) {
+            return null;
         }
 
-        throw new Error('Invalid date format');
-      } catch (error) {
-        window.Logger?.warn('Invalid dateTime format, using current time:', dateTime);
-        return new Date();
-      }
+        // targetId形式: "userId_date_cellType"
+        const parts = this.targetId.split('_');
+        if (parts.length !== 3) {
+            return null;
+        }
+
+        return {
+            userId: parts[0],
+            date: parts[1],
+            cellType: parts[2]
+        };
     }
 
-    return new Date();
-  }
-
-  /**
-   * バリデーション
-   * @private
-   */
-  _validate() {
-    // targetTypeの検証
-    const validTargetTypes = ['user', 'cell'];
-    if (!validTargetTypes.includes(this.targetType)) {
-      throw new Error(`targetType must be one of: ${validTargetTypes.join(', ')}`);
+    /**
+     * 備考の文字数を取得
+     * @returns {number}
+     */
+    getLength() {
+        return this.content.length;
     }
 
-    // targetIdの検証
-    if (!this.targetId || typeof this.targetId !== 'string' || this.targetId.trim().length === 0) {
-      throw new Error('targetId is required and must be a non-empty string');
+    /**
+     * 備考が最近更新されたかどうか
+     * @param {number} minutes - 判定する分数（デフォルト: 5分）
+     * @returns {boolean}
+     */
+    isRecentlyUpdated(minutes = 5) {
+        const now = Date.now();
+        const updated = this.getUpdatedDate().getTime();
+        const diff = now - updated;
+        return diff < minutes * 60 * 1000;
     }
 
-    // contentの検証
-    if (typeof this.content !== 'string') {
-      throw new Error('content must be a string');
+    /**
+     * JSON形式に変換
+     * @returns {object}
+     */
+    toJSON() {
+        return {
+            id: this.id,
+            targetType: this.targetType,
+            targetId: this.targetId,
+            content: this.content,
+            createdAt: this.createdAt,
+            updatedAt: this.updatedAt
+        };
     }
 
-    // 内容の長さチェック（AppConfigが利用可能な場合）
-    if (window.AppConfig && window.AppConfig.VALIDATION && window.AppConfig.VALIDATION.NOTE_MAX_LENGTH) {
-      const maxLength = window.AppConfig.VALIDATION.NOTE_MAX_LENGTH;
-      if (this.content.length > maxLength) {
-        throw new Error(`Note content must be ${maxLength} characters or less`);
-      }
+    /**
+     * JSONからNoteインスタンスを作成
+     * @param {object} json - JSONデータ
+     * @returns {Note}
+     */
+    static fromJSON(json) {
+        return new Note(json);
     }
 
-    // 日時の検証
-    if (!(this.createdAt instanceof Date) || isNaN(this.createdAt.getTime())) {
-      throw new Error('Invalid createdAt');
+    /**
+     * 複数の備考をJSONから作成
+     * @param {Array} jsonArray - JSONデータの配列
+     * @returns {Array<Note>}
+     */
+    static fromJSONArray(jsonArray) {
+        if (!Array.isArray(jsonArray)) {
+            return [];
+        }
+        return jsonArray.map(json => Note.fromJSON(json));
     }
 
-    if (!(this.updatedAt instanceof Date) || isNaN(this.updatedAt.getTime())) {
-      throw new Error('Invalid updatedAt');
-    }
-  }
-
-  /**
-   * 備考内容を更新
-   * @param {string} content - 新しい備考内容
-   */
-  update(content) {
-    if (typeof content !== 'string') {
-      throw new Error('Content must be a string');
-    }
-
-    // 内容の長さチェック
-    if (window.AppConfig && window.AppConfig.VALIDATION && window.AppConfig.VALIDATION.NOTE_MAX_LENGTH) {
-      const maxLength = window.AppConfig.VALIDATION.NOTE_MAX_LENGTH;
-      if (content.length > maxLength) {
-        throw new Error(`Note content must be ${maxLength} characters or less`);
-      }
+    /**
+     * 利用者備考を作成
+     * @param {string} userId - 利用者ID
+     * @param {string} content - 備考内容
+     * @returns {Note}
+     */
+    static createUserNote(userId, content = '') {
+        return new Note({
+            targetType: 'user',
+            targetId: userId,
+            content: content
+        });
     }
 
-    this.content = content;
-    this.updatedAt = new Date();
-
-    window.Logger?.debug(`Note ${this.id} updated`);
-  }
-
-  /**
-   * 備考が空かどうか
-   * @returns {boolean} 空かどうか
-   */
-  isEmpty() {
-    return this.content.trim().length === 0;
-  }
-
-  /**
-   * 備考がユーザー向けかどうか
-   * @returns {boolean} ユーザー向けかどうか
-   */
-  isUserNote() {
-    return this.targetType === 'user';
-  }
-
-  /**
-   * 備考がセル向けかどうか
-   * @returns {boolean} セル向けかどうか
-   */
-  isCellNote() {
-    return this.targetType === 'cell';
-  }
-
-  /**
-   * 作成からの経過時間を取得（分単位）
-   * @returns {number} 経過分数
-   */
-  getMinutesAge() {
-    const now = new Date();
-    const diffMs = now.getTime() - this.createdAt.getTime();
-    return Math.floor(diffMs / (1000 * 60));
-  }
-
-  /**
-   * 更新からの経過時間を取得（分単位）
-   * @returns {number} 経過分数
-   */
-  getMinutesSinceUpdate() {
-    const now = new Date();
-    const diffMs = now.getTime() - this.updatedAt.getTime();
-    return Math.floor(diffMs / (1000 * 60));
-  }
-
-  /**
-   * 作成・更新日時の表示用文字列を取得
-   * @returns {Object} 作成・更新日時の情報
-   */
-  getDateTimeInfo() {
-    return {
-      created: window.DateUtils.formatDate(this.createdAt, 'YYYY-MM-DD HH:mm'),
-      updated: window.DateUtils.formatDate(this.updatedAt, 'YYYY-MM-DD HH:mm'),
-      createdAge: this.getMinutesAge(),
-      updatedAge: this.getMinutesSinceUpdate(),
-      wasUpdated: !window.DateUtils.isSameDate(this.createdAt, this.updatedAt) || 
-                  Math.abs(this.updatedAt.getTime() - this.createdAt.getTime()) > 60000 // 1分以上の差
-    };
-  }
-
-  /**
-   * オブジェクトをJSON形式に変換
-   * @returns {Object} JSON形式のオブジェクト
-   */
-  toJSON() {
-    return {
-      id: this.id,
-      targetType: this.targetType,
-      targetId: this.targetId,
-      content: this.content,
-      createdAt: this.createdAt.toISOString(),
-      updatedAt: this.updatedAt.toISOString(),
-      // 追加情報
-      isEmpty: this.isEmpty(),
-      dateTimeInfo: this.getDateTimeInfo()
-    };
-  }
-
-  /**
-   * JSON形式のデータからNoteインスタンスを生成
-   * @param {Object} data - JSON形式のデータ
-   * @returns {Note} Noteインスタンス
-   */
-  static fromJSON(data) {
-    if (!data || typeof data !== 'object') {
-      throw new Error('Invalid data for Note.fromJSON');
+    /**
+     * セル備考を作成
+     * @param {string} userId - 利用者ID
+     * @param {string} date - 日付（"YYYY-MM-DD"形式）
+     * @param {string} cellType - セルタイプ
+     * @param {string} content - 備考内容
+     * @returns {Note}
+     */
+    static createCellNote(userId, date, cellType, content = '') {
+        return new Note({
+            targetType: 'cell',
+            targetId: `${userId}_${date}_${cellType}`,
+            content: content
+        });
     }
 
-    try {
-      return new Note({
-        id: data.id,
-        targetType: data.targetType,
-        targetId: data.targetId,
-        content: data.content,
-        createdAt: data.createdAt,
-        updatedAt: data.updatedAt
-      });
-    } catch (error) {
-      window.Logger?.error('Error creating Note from JSON:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 複数のJSON形式データからNoteインスタンス配列を生成
-   * @param {Array} dataArray - JSON形式データの配列
-   * @returns {Note[]} Noteインスタンスの配列
-   */
-  static fromJSONArray(dataArray) {
-    if (!Array.isArray(dataArray)) {
-      throw new Error('Input must be an array');
+    /**
+     * 利用者備考をフィルタ
+     * @param {Array<Note>} notes - 備考の配列
+     * @returns {Array<Note>}
+     */
+    static filterUserNotes(notes) {
+        return notes.filter(note => note.isUserNote());
     }
 
-    return dataArray.map((data, index) => {
-      try {
-        return Note.fromJSON(data);
-      } catch (error) {
-        window.Logger?.error(`Error creating Note from JSON at index ${index}:`, error);
-        throw error;
-      }
-    });
-  }
-
-  /**
-   * 指定されたtargetTypeとtargetIdでNoteを検索
-   * @param {Note[]} notes - 検索対象のNote配列
-   * @param {string} targetType - 対象タイプ
-   * @param {string} targetId - 対象ID
-   * @returns {Note[]} マッチするNote配列
-   */
-  static findByTarget(notes, targetType, targetId) {
-    if (!Array.isArray(notes)) {
-      return [];
+    /**
+     * セル備考をフィルタ
+     * @param {Array<Note>} notes - 備考の配列
+     * @returns {Array<Note>}
+     */
+    static filterCellNotes(notes) {
+        return notes.filter(note => note.isCellNote());
     }
 
-    return notes.filter(note => 
-      note instanceof Note &&
-      note.targetType === targetType &&
-      note.targetId === targetId
-    );
-  }
-
-  /**
-   * 文字列表現を取得
-   * @returns {string} 文字列表現
-   */
-  toString() {
-    const preview = this.content.length > 30 ? 
-      this.content.substring(0, 30) + '...' : 
-      this.content;
-    return `Note(${this.id}): ${this.targetType}:${this.targetId} "${preview}"`;
-  }
-
-  /**
-   * 2つのNoteインスタンスが同じかどうかを比較
-   * @param {Note} other - 比較対象のNote
-   * @returns {boolean} 同じかどうか
-   */
-  equals(other) {
-    if (!(other instanceof Note)) {
-      return false;
+    /**
+     * 特定の対象IDの備考を検索
+     * @param {Array<Note>} notes - 備考の配列
+     * @param {string} targetId - 対象ID
+     * @returns {Note|null}
+     */
+    static findByTargetId(notes, targetId) {
+        return notes.find(note => note.targetId === targetId) || null;
     }
 
-    return this.id === other.id &&
-           this.targetType === other.targetType &&
-           this.targetId === other.targetId &&
-           this.content === other.content;
-  }
+    /**
+     * 特定の利用者の備考を検索
+     * @param {Array<Note>} notes - 備考の配列
+     * @param {string} userId - 利用者ID
+     * @returns {Note|null}
+     */
+    static findUserNote(notes, userId) {
+        return notes.find(note => note.isUserNote() && note.targetId === userId) || null;
+    }
 
-  /**
-   * Noteインスタンスのクローンを作成
-   * @returns {Note} クローンされたNoteインスタンス
-   */
-  clone() {
-    return new Note({
-      id: this.id,
-      targetType: this.targetType,
-      targetId: this.targetId,
-      content: this.content,
-      createdAt: new Date(this.createdAt),
-      updatedAt: new Date(this.updatedAt)
-    });
-  }
+    /**
+     * 特定のセルの備考を検索
+     * @param {Array<Note>} notes - 備考の配列
+     * @param {string} userId - 利用者ID
+     * @param {string} date - 日付
+     * @param {string} cellType - セルタイプ
+     * @returns {Note|null}
+     */
+    static findCellNote(notes, userId, date, cellType) {
+        const targetId = `${userId}_${date}_${cellType}`;
+        return notes.find(note => note.isCellNote() && note.targetId === targetId) || null;
+    }
+
+    /**
+     * 空でない備考のみをフィルタ
+     * @param {Array<Note>} notes - 備考の配列
+     * @returns {Array<Note>}
+     */
+    static filterNonEmpty(notes) {
+        return notes.filter(note => !note.isEmpty());
+    }
+
+    /**
+     * 更新日時でソート（新しい順）
+     * @param {Array<Note>} notes - 備考の配列
+     * @returns {Array<Note>}
+     */
+    static sortByUpdatedDate(notes) {
+        return notes.slice().sort((a, b) => {
+            const dateA = a.getUpdatedDate();
+            const dateB = b.getUpdatedDate();
+            return dateB - dateA;  // 降順
+        });
+    }
 }
 
-// グローバルに登録
+// グローバル変数として公開
 window.Note = Note;

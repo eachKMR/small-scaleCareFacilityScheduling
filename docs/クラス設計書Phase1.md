@@ -1,4 +1,44 @@
-# 小規模多機能利用調整システム Phase 1 クラス設計書（統合版 v1.6）
+# 小規模多機能利用調整システム Phase 1 クラス設計書 v1.8
+
+**最終更新**: 2025年11月14日  
+**バージョン**: 1.8  
+**変更内容**: クイックナビゲーション追加、実装効率の向上
+
+---
+
+## 📚 クイックナビゲーション
+
+### 🎯 Phase 0実装箇所
+- [Phase 0-A: User拡張](#phase-0-a-user拡張)（所要: 30分）
+- [Phase 0-B: 特別セル対応](#phase-0-b-特別セル対応)（所要: 2時間）
+- [Phase 0-C: 定員カウント修正](#phase-0-c-定員カウント修正)（所要: 2時間）
+- [Phase 0-D: AppConfig拡張](#phase-0-d-appconfig拡張)（所要: 1時間）
+
+### 📋 クラス別変更点
+- [2.1.1 Userクラス](#211-userクラス利用者) - sortId追加
+- [2.1.2 ScheduleCellクラス](#212-schedulecellクラス予定セル) - 特別セル・記号変更
+- [2.1.3 StayPeriodクラス](#213-stayperiodクラス宿泊期間) - 月またぎ対応
+- [2.1.4 ScheduleCalendarクラス](#214-schedulecalendarクラス月間予定) - 33セル構造
+- [2.1.5 DailyCapacityクラス](#215-dailycapacityクラス日別定員) - 前半後半カウント
+- [2.1.6 ServiceCapacityクラス](#216-servicecapacityクラス定員管理) - 集計ロジック
+
+### 🔧 その他の重要セクション
+- [0.4 v1.8での重要な変更点](#04-v18での重要な変更点)
+- [3. Phase 0実装詳細](#3-phase-0実装詳細)
+- [6. HTMLでの読み込み順序](#6-htmlでの読み込み順序修正版)
+- [7. 参照ドキュメント](#7-参照ドキュメント)
+
+---
+
+## 📝 改訂履歴
+
+| 日付 | 版 | 変更内容 | 担当 |
+|------|-----|----------|------|
+| 2025-11-11 | 1.6 | 統合版作成 | GitHub Copilot |
+| 2025-11-14 | 1.7 | 要件定義書v1.0反映、DEFAULT_USERS廃止、Phase 0確定事項追加 | Claude |
+| **2025-11-14** | **1.8** | **クイックナビゲーション追加、実装効率向上** | **Claude** |
+
+---
 
 ## 0. プロジェクト概要
 
@@ -8,26 +48,30 @@
 ### 0.2 技術的条件
 - JavaScriptでオブジェクト指向プログラミング
 - ブラウザ上で動作
-- データ入出力はExcelで行う
-- LocalStorageでデータ永続化
+- データ永続化：LocalStorage
+- データ入出力：Excel、CSV
 
 ### 0.3 主要機能
 - 利用者29人分の予定管理（通い・泊り・訪問）
 - 定員チェック（通い15人、泊り9人）
+- 月またぎ宿泊対応（特別セル）
 - 入所〜退所の区間自動処理
 - 利用者備考・セル備考の管理
-- Excel入出力（現行フォーマット準拠）
+- CSV/Excel入出力
 
-### 0.4 改訂履歴と重要な変更点
+### 0.4 v1.8での重要な変更点
 
-#### v1.6での統合内容（2025-11-11）
-**実装フィードバックによる改善**:
-- ✅ コンストラクタ引数の明確化と初期化例の追加
-- ✅ メソッド名の統一（getCurrentYearMonth()に統一）
-- ✅ 依存関係グラフの追加
-- ✅ main.jsの責務定義を明確化
-- ✅ 詳細なクラス図と処理フローを保持
-- ✅ UI設計情報を保持
+#### 🆕 要件定義書v1.0の反映
+- **DEFAULT_USERS廃止**: js/data/users.js を削除、利用者マスタは空の状態で起動
+- **33セル構造**: 左特別セル + 1〜31日 + 右特別セル
+- **前半後半カウント**: 通いの定員を前半・後半で分離カウント
+- **記号変更**: Unicode記号（○◓◒入退）に統一
+- **データ保存**: セル入力ごとに自動保存
+
+#### 🎯 Phase 0確定事項（2025-11-14）
+1. **起動時の画面**: 空のグリッド + メッセージ
+2. **月選択UI**: ドロップダウン（前後3ヶ月）
+3. **データ保存タイミング**: セル入力ごとに自動保存
 
 ---
 
@@ -51,93 +95,9 @@
 └─────────────────────────────────────┘
 ```
 
-### 1.2 依存関係グラフ（新規追加）
-
-```mermaid
-graph TD
-    %% Utilities
-    Logger[Logger]
-    EventEmitter[EventEmitter]
-    DateUtils[DateUtils]
-    IdGenerator[IdGenerator]
-    AppConfig[AppConfig]
-    
-    %% Models
-    User[User]
-    Note[Note]
-    ScheduleCell[ScheduleCell]
-    StayPeriod[StayPeriod]
-    ScheduleCalendar[ScheduleCalendar]
-    DailyCapacity[DailyCapacity]
-    ServiceCapacity[ServiceCapacity]
-    
-    %% Services
-    StorageService[StorageService]
-    ExcelService[ExcelService]
-    
-    %% Controllers
-    ScheduleController[ScheduleController]
-    CapacityCheckController[CapacityCheckController]
-    NoteController[NoteController]
-    ExcelController[ExcelController]
-    
-    %% Components
-    App[App]
-    ScheduleGrid[ScheduleGrid]
-    CellEditor[CellEditor]
-    Toolbar[Toolbar]
-    CapacityIndicator[CapacityIndicator]
-    NotePanel[NotePanel]
-    
-    %% Dependencies
-    User --> IdGenerator
-    User --> DateUtils
-    Note --> IdGenerator
-    Note --> DateUtils
-    ScheduleCell --> DateUtils
-    StayPeriod --> DateUtils
-    ScheduleCalendar --> ScheduleCell
-    ScheduleCalendar --> StayPeriod
-    ScheduleCalendar --> DateUtils
-    ServiceCapacity --> DailyCapacity
-    ServiceCapacity --> ScheduleCalendar
-    
-    StorageService --> AppConfig
-    StorageService --> User
-    StorageService --> Note
-    ExcelService --> AppConfig
-    
-    ScheduleController --> EventEmitter
-    ScheduleController --> StorageService
-    ScheduleController --> User
-    ScheduleController --> ScheduleCalendar
-    
-    CapacityCheckController --> ScheduleController
-    CapacityCheckController --> ServiceCapacity
-    
-    NoteController --> EventEmitter
-    NoteController --> StorageService
-    NoteController --> Note
-    
-    ExcelController --> ExcelService
-    ExcelController --> ScheduleController
-    
-    App --> EventEmitter
-    App --> ScheduleController
-    App --> CapacityCheckController
-    App --> NoteController
-    App --> ExcelController
-    
-    ScheduleGrid --> App
-    CellEditor --> App
-    Toolbar --> App
-    CapacityIndicator --> App
-    NotePanel --> App
-```
-
 ---
 
-## 2. クラス図
+## 2. 詳細クラス図
 
 ### 2.1 Domain Layer（ドメインモデル）
 
@@ -150,6 +110,7 @@ graph TD
 │ - id: string                │ 利用者ID
 │ - name: string              │ 氏名
 │ - registrationDate: Date    │ 登録日
+│ - sortId: number            │ 🆕 並び順ID
 │ - note: string              │ 備考
 │ - isActive: boolean         │ 利用中フラグ
 ├─────────────────────────────┤
@@ -158,6 +119,11 @@ graph TD
 └─────────────────────────────┘
 ```
 
+**🆕 v1.8での変更点**:
+- `sortId` プロパティ追加（要件定義書_データ管理_v1.0.md 対応）
+
+---
+
 #### 2.1.2 ScheduleCellクラス（予定セル）
 
 ```
@@ -165,25 +131,45 @@ graph TD
 │   ScheduleCell              │ 予定セル
 ├─────────────────────────────┤
 │ - userId: string            │
-│ - date: Date                │
+│ - date: string              │ 🆕 "2025-12-05" または "2025-12-prevMonth"
 │ - cellType: string          │ "dayStay" | "visit"
-│ - inputValue: string        │ "1", "入所", "退所", 数値等
+│ - inputValue: string        │ 🆕 "○", "◓", "◒", "入", "退", 数値
 │ - note: string              │ セル備考
 │                             │
 │ 【計算結果フラグ】          │
 │ - actualFlags: object       │
 │   ├ day: boolean            │ 通いフラグ
 │   ├ stay: boolean           │ 泊りフラグ
-│   └ visit: number           │ 訪問回数
+│   ├ visit: number           │ 訪問回数
+│   └ halfDayType: string     │ 🆕 'full' | 'morning' | 'afternoon'
+│                             │
+│ 【削除⇔復元機能】🆕       │
+│ - deletedValue: string      │ 削除前の値
+│ - deletedAt: number         │ 削除時刻（ミリ秒）
 │                             │
 ├─────────────────────────────┤
 │ + isEmpty(): boolean        │
-│ + isStayStart(): boolean    │ "入所"判定
-│ + isStayEnd(): boolean      │ "退所"判定
+│ + isStayStart(): boolean    │ "入"判定
+│ + isStayEnd(): boolean      │ "退"判定
+│ + isFullDay(): boolean      │ 🆕 "○"判定
+│ + isMorning(): boolean      │ 🆕 "◓"判定
+│ + isAfternoon(): boolean    │ 🆕 "◒"判定
+│ + isSpecialCell(): boolean  │ 🆕 特別セル判定
+│ + delete(): void            │ 🆕 削除
+│ + restore(): boolean        │ 🆕 復元
+│ + canRestore(): boolean     │ 🆕 復元可能判定
+│ + getDayCountContribution(): object │ 🆕 前半後半カウント
 │ + hasNote(): boolean        │
 │ + toJSON(): object          │
 └─────────────────────────────┘
 ```
+
+**🆕 v1.8での変更点**:
+- 記号を Unicode に変更（○◓◒入退）
+- 削除⇔復元機能追加
+- 前半後半カウント対応
+
+---
 
 #### 2.1.3 StayPeriodクラス（宿泊期間）
 
@@ -193,54 +179,86 @@ graph TD
 ├─────────────────────────────┤
 │ - startDate: Date           │ 入所日
 │ - endDate: Date             │ 退所日
-│ - userId: string            │ 利用者ID
+│ - userId: string            │
+│ - note: string              │
 ├─────────────────────────────┤
-│ + getDates(): Date[]        │ 期間内全日付
-│ + contains(date): boolean   │ 日付が期間内か
-│ + getDuration(): number     │ 宿泊日数
+│ + getDuration(): number     │ 日数
+│ + getDatesInMonth(yearMonth): Date[] │ 🆕 当月分のみ
+│ + isValid(): boolean        │
+│ + overlaps(other): boolean  │
+└─────────────────────────────┘
+```
+
+**🆕 v1.8での変更点**:
+- `getDatesInMonth()` 追加（月またぎ対応）
+
+---
+
+#### 2.1.4 ScheduleCalendarクラス（月間予定）
+
+```
+┌─────────────────────────────┐
+│   ScheduleCalendar          │ 月間予定
+├─────────────────────────────┤
+│ - userId: string            │
+│ - yearMonth: string         │ "YYYY-MM"
+│ - cells: Map<string, ScheduleCell>│ 🆕 33セル構造
+│ - prevMonthCell: ScheduleCell│ 🆕 左特別セル
+│ - nextMonthCell: ScheduleCell│ 🆕 右特別セル
+│ - stayPeriods: StayPeriod[] │
+├─────────────────────────────┤
+│ + getCell(date): ScheduleCell│
+│ + setCell(date, value): void│
+│ + getPrevMonthCell(): ScheduleCell│ 🆕
+│ + getNextMonthCell(): ScheduleCell│ 🆕
+│ + setPrevMonthCell(value): void│ 🆕
+│ + setNextMonthCell(value): void│ 🆕
+│ + calculateStayPeriods(): void│
+│ + calculateCrossMonthStay(): StayPeriod[]│ 🆕
+│ + calculateAllFlags(): void │ 🆕 退所日の泊りフラグ修正
+│ + getDaysInMonth(): number  │ 🆕 33セル固定
+│ + clear(): void             │
 │ + toJSON(): object          │
 └─────────────────────────────┘
 ```
 
-#### 2.1.4 ScheduleCalendarクラス（利用者月間予定）
+**🆕 v1.8での変更点**:
+- 33セル構造（特別セル対応）
+- 月またぎ宿泊の計算
+- 退所日の泊りフラグ処理
 
-```
-┌──────────────────────────────┐
-│   ScheduleCalendar           │ 利用者月間予定
-├──────────────────────────────┤
-│ - userId: string             │
-│ - yearMonth: string          │ "2025-12"
-│ - cells: Map<date, ScheduleCell>│
-│ - stayPeriods: StayPeriod[]  │
-├──────────────────────────────┤
-│ + setCell(date, type, value): void│
-│ + getCell(date, type): ScheduleCell│
-│ + calculateStayPeriods(): void│ 入所〜退所を計算
-│ + calculateAllFlags(): void  │ stay/dayフラグ計算
-│ + getDaysInMonth(): Date[]   │
-│ + toJSON(): object           │
-└──────────────────────────────┘
-```
+---
 
 #### 2.1.5 DailyCapacityクラス（日別定員）
 
 ```
 ┌──────────────────────────────┐
-│   DailyCapacity              │ 日別定員
+│   DailyCapacity              │ 日別定員情報
 ├──────────────────────────────┤
 │ - date: Date                 │
-│ - dayCount: number           │ 通い利用者数
-│ - stayCount: number          │ 泊り利用者数
+│ - dayCountMorning: number    │ 🆕 前半通い人数
+│ - dayCountAfternoon: number  │ 🆕 後半通い人数
+│ - stayCount: number          │ 泊り人数
 │ - visitCount: number         │ 訪問回数合計
 │ - dayLimit: number           │ 通い定員(15)
 │ - stayLimit: number          │ 泊り定員(9)
 ├──────────────────────────────┤
+│ + getMaxDayCount(): number   │ 🆕 前半後半の最大値
 │ + isOverCapacity(): boolean  │
 │ + getDayOverflow(): number   │
 │ + getStayOverflow(): number  │
+│ + getCapacitySymbol(): string│ 🆕 定員状況の記号（◎○△×）
+│ + getTooltipData(): object   │ 🆕 ツールチップ用データ
 │ + getUtilizationRate(): object│
 └──────────────────────────────┘
 ```
+
+**🆕 v1.8での変更点**:
+- 前半・後半の分離カウント対応
+- 定員状況の記号表示
+- ツールチップ用データ生成
+
+---
 
 #### 2.1.6 ServiceCapacityクラス（定員管理）
 
@@ -250,1113 +268,575 @@ graph TD
 ├──────────────────────────────┤
 │ - calendars: ScheduleCalendar[]│
 ├──────────────────────────────┤
-│ + checkDate(date): DailyCapacity│
+│ + checkDate(date): DailyCapacity│ 🆕 前半後半カウント対応
 │ + checkMonth(yearMonth): DailyCapacity[]│
 │ + getOverCapacityDates(): Date[]│
-│ + getSummary(): object       │
-└──────────────────────────────┘
-```
-
-#### 2.1.7 Noteクラス（備考）
-
-```
-┌──────────────────────────────┐
-│   Note                       │ 備考
-├──────────────────────────────┤
-│ - id: string                 │
-│ - targetType: string         │ "user" | "cell"
-│ - targetId: string           │
-│ - content: string            │
-│ - createdAt: Date            │
-│ - updatedAt: Date            │
-├──────────────────────────────┤
-│ + isUserNote(): boolean      │
-│ + isCellNote(): boolean      │
-│ + toJSON(): object           │
+│ + getSummary(): object       │ 🆕 前半後半平均値対応
 └──────────────────────────────┘
 ```
 
 ---
 
-### 2.2 Application Layer（コントローラー）
+## 3. Phase 0実装詳細
 
-#### 2.2.1 ScheduleControllerクラス（修正版：依存関係明確化）
+### Phase 0-A: User拡張
 
-```
-┌──────────────────────────────┐
-│  ScheduleController          │ 予定管理
-├──────────────────────────────┤
-│ - storageService: StorageService│
-│ - currentYearMonth: string   │
-│ - users: User[]              │
-│ - calendars: Map<userId, ScheduleCalendar>│
-├──────────────────────────────┤
-│ + getCurrentYearMonth(): string│ ✅修正済
-│ + loadUsers(): void          │
-│ + loadSchedule(yearMonth): void│
-│ + saveSchedule(): void       │
-│ + updateCell(userId, date, type, value): void│
-│ + getCalendar(userId): ScheduleCalendar│
-│ + getAllCalendars(): ScheduleCalendar[]│
-│ + recalculateAllFlags(): void│
-└──────────────────────────────┘
-```
+**実装ファイル**: `js/models/User.js`
 
-#### 2.2.2 CapacityCheckControllerクラス（修正版：コンストラクタ引数明確化）
-
-```
-┌──────────────────────────────┐
-│ CapacityCheckController      │ 定員チェック
-├──────────────────────────────┤
-│ - scheduleController: ScheduleController│ ✅必須引数
-│ - serviceCapacity: ServiceCapacity│
-├──────────────────────────────┤
-│ + checkAll(): DailyCapacity[]│
-│ + checkDate(date): DailyCapacity│
-│ + getOverCapacityDates(): Date[]│
-│ + getSummary(): object       │
-└──────────────────────────────┘
-```
-
-#### 2.2.3 NoteControllerクラス
-
-```
-┌──────────────────────────────┐
-│ NoteController               │ 備考管理
-├──────────────────────────────┤
-│ - notes: Map<id, Note>       │
-│ - storageService: StorageService│
-├──────────────────────────────┤
-│ + getUserNotes(userId): Note[]│ ✅修正済
-│ + getCellNote(cellId): Note  │
-│ + saveNote(note): void       │
-│ + deleteNote(id): void       │
-│ + hasNote(targetType, targetId): boolean│
-└──────────────────────────────┘
-```
-
-#### 2.2.4 ExcelControllerクラス（修正版：コンストラクタ引数修正）
-
-```
-┌──────────────────────────────┐
-│ ExcelController              │ Excel入出力
-├──────────────────────────────┤
-│ - excelService: ExcelService │ ✅必須引数
-│ - scheduleController: ScheduleController│ ✅必須引数
-├──────────────────────────────┤
-│ + importFromExcel(file): void│
-│ + exportTemplate(yearMonth): Blob│ ✅修正済
-│ + parseCurrentFormat(sheet): object│
-│ + generateCurrentFormat(data): Workbook│
-└──────────────────────────────┘
-```
-
----
-
-### 2.3 Infrastructure Layer（永続化・外部連携）
-
-#### 2.3.1 StorageServiceクラス
-
-```
-┌──────────────────────────────┐
-│  StorageService              │ LocalStorage操作
-├──────────────────────────────┤
-│ - storageKeys: object        │
-├──────────────────────────────┤
-│ + save(key, data): boolean   │
-│ + load(key, defaultValue): any│
-│ + saveSchedule(yearMonth, data): boolean│
-│ + loadSchedule(yearMonth): object│
-│ + listSchedules(): string[]  │
-│ + saveUsers(users): boolean  │
-│ + loadUsers(): User[]        │
-│ + saveNotes(notes): boolean  │
-│ + loadNotes(): Note[]        │
-│ + clearAll(): void           │
-└──────────────────────────────┘
-```
-
-#### 2.3.2 ExcelServiceクラス
-
-```
-┌──────────────────────────────┐
-│  ExcelService                │ Excel読み書き（SheetJS）
-├──────────────────────────────┤
-│ - XLSX: object               │
-├──────────────────────────────┤
-│ + readFile(file): Promise<Workbook>│
-│ + parseSheet(sheet, config): object│
-│ + createWorkbook(): Workbook │
-│ + writeSheet(data, config): Sheet│
-│ + downloadFile(workbook, filename): void│
-└──────────────────────────────┘
-```
-
----
-
-### 2.4 Presentation Layer（UIコンポーネント）
-
-#### 2.4.1 Appクラス
-
-```
-┌──────────────────────────────┐
-│  App                         │ アプリケーション本体
-├──────────────────────────────┤
-│ - currentYearMonth: string   │
-│ - components: object         │
-│ - controllers: object        │
-│ - isInitialized: boolean     │
-├──────────────────────────────┤
-│ + init(): Promise<void>      │
-│ + switchMonth(yearMonth): void│
-│ + updateCell(userId, date, type, value): void│
-│ + showNotePanel(target): void│
-│ + showToast(message, type): void│
-└──────────────────────────────┘
-```
-
-#### 2.4.2 ScheduleGridクラス
-
-```
-┌──────────────────────────────┐
-│  ScheduleGrid                │ 予定グリッド
-├──────────────────────────────┤
-│ - app: App                   │
-│ - container: HTMLElement     │
-│ - currentData: object        │
-├──────────────────────────────┤
-│ + init(): void               │
-│ + render(): void             │
-│ + updateCell(userId, date): void│
-│ + handleCellClick(event): void│
-│ + applyCapacityColors(): void│
-└──────────────────────────────┘
-```
-
-#### 2.4.3 CellEditorクラス
-
-```
-┌──────────────────────────────┐
-│  CellEditor                  │ セル編集
-├──────────────────────────────┤
-│ - app: App                   │
-│ - currentCell: object        │
-│ - isEditing: boolean         │
-├──────────────────────────────┤
-│ + startEdit(cell): void      │
-│ + finishEdit(): void         │
-│ + cancelEdit(): void         │
-│ + showQuickPalette(): void   │
-└──────────────────────────────┘
-```
-
-#### 2.4.4 CapacityIndicatorクラス
-
-```
-┌──────────────────────────────┐
-│  CapacityIndicator           │ 定員表示
-├──────────────────────────────┤
-│ - app: App                   │
-│ - container: HTMLElement     │
-├──────────────────────────────┤
-│ + init(): void               │
-│ + refresh(): void            │
-│ + updateDailyDisplay(date): void│
-│ + showOverCapacityAlert(): void│
-└──────────────────────────────┘
-```
-
-#### 2.4.5 NotePanelクラス
-
-```
-┌──────────────────────────────┐
-│  NotePanel                   │ 備考パネル
-├──────────────────────────────┤
-│ - app: App                   │
-│ - isVisible: boolean         │
-│ - currentTarget: object      │
-├──────────────────────────────┤
-│ + show(target): void         │
-│ + hide(): void               │
-│ + saveNote(): void           │
-│ + deleteNote(): void         │
-└──────────────────────────────┘
-```
-
-#### 2.4.6 Toolbarクラス
-
-```
-┌──────────────────────────────┐
-│  Toolbar                     │ ツールバー
-├──────────────────────────────┤
-│ - app: App                   │
-│ - container: HTMLElement     │
-├──────────────────────────────┤
-│ + init(): void               │
-│ + renderMonthSelector(): void│
-│ + handleExcelImport(): void  │
-│ + handleExcelExport(): void  │
-│ + handleCapacityCheck(): void│
-└──────────────────────────────┘
-```
-
----
-
-## 3. 重要な処理フロー
-
-### 3.1 入所〜退所の自動処理
-
-```
-1. ユーザーが「入所」を入力
-   ↓
-2. ScheduleCell.inputValue = "入所"
-   ↓
-3. ScheduleCalendar.calculateStayPeriods()
-   - dayStayCellsを順にスキャン
-   - "入所"を見つけたら startDate に設定
-   - 次の"退所"を見つけたら endDate に設定
-   - StayPeriod オブジェクトを生成
-   ↓
-4. ScheduleCalendar.calculateAllFlags()
-   - 各StayPeriodについて
-   - period.getDates() で期間内の全日付を取得
-   - 各日付のセルに actualFlags.stay = true
-   - 各日付のセルに actualFlags.day = true
-   ↓
-5. ServiceCapacity.checkDate()
-   - 全利用者のactualFlagsを集計
-   - 定員チェック
-   ↓
-6. UIに反映（色分け、集計表示）
-```
-
-### 3.2 セル編集の流れ
-
-```
-1. ユーザーがセルをクリック
-   ↓
-2. CellEditor.startEdit(cell)
-   - セルのタイプ（通泊/訪問）を判定
-   - 入力フィールドまたはクイック入力パレットを表示
-   ↓
-3. ユーザーが値を入力
-   ↓
-4. CellEditor.finishEdit()
-   ↓
-5. ScheduleController.updateCell(userId, date, type, value)
-   - ScheduleCalendar.setCell()
-   - calculateStayPeriods()（通泊セルの場合）
-   - calculateAllFlags()
-   ↓
-6. CapacityCheckController.checkDate(date)
-   ↓
-7. UI更新
-   - ScheduleGrid.updateCell()
-   - CapacityIndicator.refresh()
-```
-
----
-
-## 4. 命名規則の統一（実装フィードバック反映）
-
-### 4.1 メソッド命名の統一
-
-| 目的 | 正しい命名 | 誤った命名 | 理由 |
-|------|-----------|-----------|------|
-| 年月取得 | getCurrentYearMonth() | getCurrentMonth() | JavaScriptのgetMonth()は0-11を返すため混乱を避ける |
-| 日付取得 | getCurrentDate() | getToday() | 一般的なJavaScript慣習に従う |
-| 現在の値 | getCurrentXxx() | getXxx() | 「現在」を明示 |
-| 全体取得 | getAllXxx() | getXxx() | 単数形は1つ、複数形は全体 |
-
-### 4.2 クラス命名規則
-
+**実装内容**:
 ```javascript
-// 良い例
-class ScheduleController { }   // 名詞+Controller
-class StorageService { }        // 名詞+Service
-class ScheduleGrid { }          // UIコンポーネントは名詞のみ
-
-// 悪い例
-class Schedule { }              // 曖昧（ModelかControllerか不明）
-class ControlSchedule { }       // 動詞始まり
-```
-
----
-
-## 5. コンストラクタ仕様の明確化（実装フィードバック反映）
-
-### 3.1 統一ルール
-
-**ルール1**: 依存オブジェクトは全て引数で受け取る
-```javascript
-// ✅ 良い例
-class CapacityCheckController {
-  constructor(scheduleController) {
-    this.scheduleController = scheduleController;
+class User {
+  constructor(data) {
+    this.id = data.id;
+    this.name = data.name;
+    this.registrationDate = data.registrationDate || new Date();
+    this.sortId = data.sortId || 0; // 🆕 追加
+    this.note = data.note || '';
+    this.isActive = data.isActive !== false;
   }
-}
 
-// ❌ 悪い例
-class CapacityCheckController {
-  constructor() {
-    this.scheduleController = window.scheduleController; // グローバル参照NG
+  toJSON() {
+    return {
+      id: this.id,
+      name: this.name,
+      registrationDate: this.registrationDate,
+      sortId: this.sortId, // 🆕 追加
+      note: this.note,
+      isActive: this.isActive
+    };
+  }
+
+  static fromJSON(json) {
+    return new User(json);
   }
 }
 ```
 
-**ルール2**: 初期化例を必ず記載
+---
+
+### Phase 0-B: 特別セル対応
+
+**実装ファイル**: 
+- `js/models/ScheduleCell.js`
+- `js/models/ScheduleCalendar.js`
+
+**ScheduleCell拡張**:
 ```javascript
-/**
- * @param {ScheduleController} scheduleController
- * 
- * 初期化例:
- * const storage = new StorageService();
- * const schedule = new ScheduleController(storage);
- * const capacity = new CapacityCheckController(schedule);
- */
-constructor(scheduleController) { }
+class ScheduleCell {
+  // 🆕 特別セル判定メソッド
+  isPrevMonthCell() {
+    return this.date && this.date.endsWith('-prevMonth');
+  }
+
+  isNextMonthCell() {
+    return this.date && this.date.endsWith('-nextMonth');
+  }
+
+  isSpecialCell() {
+    return this.isPrevMonthCell() || this.isNextMonthCell();
+  }
+
+  // 🆕 記号判定メソッド
+  isFullDay() {
+    return this.inputValue === '○';
+  }
+
+  isMorning() {
+    return this.inputValue === '◓';
+  }
+
+  isAfternoon() {
+    return this.inputValue === '◒';
+  }
+}
 ```
 
-**ルール3**: 依存関係チェックを最初に実行
+**ScheduleCalendar拡張**:
 ```javascript
-constructor(scheduleController) {
-  if (!scheduleController) {
-    throw new Error('ScheduleController is required');
+class ScheduleCalendar {
+  constructor(userId, yearMonth) {
+    this.userId = userId;
+    this.yearMonth = yearMonth;
+    this.cells = new Map();
+    this.prevMonthCell = new ScheduleCell(); // 🆕
+    this.nextMonthCell = new ScheduleCell(); // 🆕
+    this.stayPeriods = [];
   }
-  this.scheduleController = scheduleController;
+
+  // 🆕 特別セル用メソッド
+  getPrevMonthCell() {
+    return this.prevMonthCell;
+  }
+
+  setPrevMonthCell(value) {
+    this.prevMonthCell.inputValue = value;
+    this.prevMonthCell.date = `${this.yearMonth}-prevMonth`;
+  }
+
+  getNextMonthCell() {
+    return this.nextMonthCell;
+  }
+
+  setNextMonthCell(value) {
+    this.nextMonthCell.inputValue = value;
+    this.nextMonthCell.date = `${this.yearMonth}-nextMonth`;
+  }
+
+  // 🆕 月またぎ宿泊の計算
+  calculateCrossMonthStay() {
+    const periods = [];
+    
+    // 前月から継続する宿泊
+    if (this.prevMonthCell.inputValue) {
+      const startDate = new Date(this.prevMonthCell.inputValue);
+      const firstCell = this.cells.get(`${this.yearMonth}-01`);
+      if (firstCell && firstCell.isStayEnd()) {
+        // 退所日を探す
+        for (let day = 1; day <= 31; day++) {
+          const cell = this.cells.get(`${this.yearMonth}-${String(day).padStart(2, '0')}`);
+          if (cell && cell.isStayEnd()) {
+            periods.push(new StayPeriod({
+              startDate: startDate,
+              endDate: new Date(`${this.yearMonth}-${String(day).padStart(2, '0')}`),
+              userId: this.userId
+            }));
+            break;
+          }
+        }
+      }
+    }
+
+    // 翌月へ継続する宿泊
+    if (this.nextMonthCell.inputValue) {
+      // 月末の入所を探す
+      for (let day = 31; day >= 1; day--) {
+        const cell = this.cells.get(`${this.yearMonth}-${String(day).padStart(2, '0')}`);
+        if (cell && cell.isStayStart()) {
+          periods.push(new StayPeriod({
+            startDate: new Date(`${this.yearMonth}-${String(day).padStart(2, '0')}`),
+            endDate: new Date(this.nextMonthCell.inputValue),
+            userId: this.userId
+          }));
+          break;
+        }
+      }
+    }
+
+    return periods;
+  }
+
+  // 🆕 33セル固定
+  getDaysInMonth() {
+    return 33; // 左特別 + 31日 + 右特別
+  }
+}
+```
+
+---
+
+### Phase 0-C: 定員カウント修正
+
+**実装ファイル**: 
+- `js/models/ScheduleCell.js`
+- `js/models/ScheduleCalendar.js`
+- `js/models/DailyCapacity.js`
+
+**ScheduleCell拡張**:
+```javascript
+class ScheduleCell {
+  // 🆕 前半後半カウント
+  getDayCountContribution() {
+    // 特別セルは定員カウントに含めない
+    if (this.isSpecialCell()) {
+      return { morning: 0, afternoon: 0, stay: false };
+    }
+
+    // 退所日は泊りカウントなし、通いは前半1+後半1
+    if (this.isStayEnd()) {
+      return { morning: 1, afternoon: 1, stay: false };
+    }
+
+    // 通いの前半後半判定
+    if (this.isFullDay()) {
+      return { morning: 1, afternoon: 1, stay: this.actualFlags.stay };
+    } else if (this.isMorning()) {
+      return { morning: 1, afternoon: 0, stay: this.actualFlags.stay };
+    } else if (this.isAfternoon()) {
+      return { morning: 0, afternoon: 1, stay: this.actualFlags.stay };
+    }
+
+    // 泊りのみ（通いなし）
+    if (this.actualFlags.stay) {
+      return { morning: 0, afternoon: 0, stay: true };
+    }
+
+    return { morning: 0, afternoon: 0, stay: false };
+  }
+}
+```
+
+**DailyCapacity拡張**:
+```javascript
+class DailyCapacity {
+  constructor(date) {
+    this.date = date;
+    this.dayCountMorning = 0;    // 🆕 前半通い人数
+    this.dayCountAfternoon = 0;  // 🆕 後半通い人数
+    this.stayCount = 0;
+    this.visitCount = 0;
+    this.dayLimit = 15;
+    this.stayLimit = 9;
+  }
+
+  // 🆕 前半後半の最大値を取得
+  getMaxDayCount() {
+    return Math.max(this.dayCountMorning, this.dayCountAfternoon);
+  }
+
+  isOverCapacity() {
+    return this.getMaxDayCount() > this.dayLimit || 
+           this.stayCount > this.stayLimit;
+  }
+
+  // 🆕 定員状況の記号
+  getCapacitySymbol() {
+    const dayRate = (this.getMaxDayCount() / this.dayLimit) * 100;
+    const stayRate = (this.stayCount / this.stayLimit) * 100;
+    const maxRate = Math.max(dayRate, stayRate);
+
+    if (maxRate <= 66) return '◎';      // 良好
+    if (maxRate <= 80) return '○';      // 通常
+    if (maxRate <= 93) return '△';      // 注意
+    return '×';                          // 定員オーバー
+  }
+
+  // 🆕 ツールチップ用データ
+  getTooltipData() {
+    return {
+      date: this.date,
+      dayMorning: `前半: ${this.dayCountMorning}/${this.dayLimit}`,
+      dayAfternoon: `後半: ${this.dayCountAfternoon}/${this.dayLimit}`,
+      stay: `泊り: ${this.stayCount}/${this.stayLimit}`,
+      visit: `訪問: ${this.visitCount}回`,
+      status: this.getCapacitySymbol()
+    };
+  }
+}
+```
+
+---
+
+### Phase 0-D: AppConfig拡張
+
+**実装ファイル**: `js/config/AppConfig.js`
+
+```javascript
+// 🆕 アプリケーション設定
+const AppConfig = {
+  // 記号定義
+  SYMBOLS: {
+    FULL_DAY: '○',      // 終日通い
+    MORNING: '◓',       // 前半通い
+    AFTERNOON: '◒',     // 後半通い
+    CHECK_IN: '入',     // 入所
+    CHECK_OUT: '退',    // 退所
+    EMPTY: ''           // 空欄
+  },
+
+  // 定員設定
+  CAPACITY: {
+    DAY_LIMIT: 15,      // 通い定員
+    STAY_LIMIT: 9,      // 泊り定員
+    THRESHOLDS: {       // 定員状況の閾値（％）
+      GOOD: 66,         // ◎：良好
+      OK: 80,           // ○：通常
+      WARN: 93,         // △：注意
+      FULL: 94          // ×：満員
+    }
+  },
+
+  // 表示設定
+  VISUAL: {
+    COLORS: {
+      STAY_PERIOD: '#fffacd',     // 宿泊期間の背景色
+      OVER_CAPACITY: '#ffcccc',   // 定員オーバーの背景色
+      WEEKEND: '#f0f0f0',          // 土日の背景色
+      HOLIDAY: '#fff0f0',          // 祝日の背景色
+      SPECIAL_CELL: '#e8e8e8'      // 特別セルの背景色
+    },
+    GRID: {
+      ROWS: 58,                    // 行数（ヘッダー含む）
+      COLS: 33,                    // 列数（特別セル含む）
+      CELL_WIDTH: 40,              // セル幅（px）
+      CELL_HEIGHT: 30              // セル高さ（px）
+    }
+  },
+
+  // データ保存設定
+  STORAGE: {
+    PREFIX: 'schedule_',           // LocalStorageキーのプレフィックス
+    AUTO_SAVE: true,               // 自動保存
+    MAX_MONTHS: 1,                 // 保持する月数
+    RESTORE_TIMEOUT: 5000          // 復元タイムアウト（ミリ秒）
+  },
+
+  // デフォルト値
+  DEFAULTS: {
+    YEAR_MONTH: (() => {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    })(),
+    USERS: []  // 空の利用者リスト（DEFAULT_USERS廃止）
+  }
+};
+
+// エクスポート
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = AppConfig;
 }
 ```
 
 ---
 
-## 4. Application Layer（修正版）
+## 4. コントローラー層の詳細
 
 ### 4.1 ScheduleController
 
 ```javascript
-class ScheduleController extends EventEmitter {
-  /**
-   * @param {StorageService} storageService
-   * 
-   * 初期化例:
-   * const storage = new StorageService();
-   * const controller = new ScheduleController(storage);
-   */
+class ScheduleController {
   constructor(storageService) {
-    super();
-    
-    if (!storageService) {
-      throw new Error('StorageService is required');
-    }
-    
     this.storageService = storageService;
-    this.currentYearMonth = null;
+    this.currentYearMonth = AppConfig.DEFAULTS.YEAR_MONTH;
     this.users = [];
     this.calendars = new Map();
   }
-  
-  // メソッド名を統一
-  getCurrentYearMonth() {  // ✅ 修正: getCurrentMonth() → getCurrentYearMonth()
-    return this.currentYearMonth;
-  }
-  
-  // ... 他のメソッド
-}
-```
 
-### 4.2 CapacityCheckController
-
-```javascript
-class CapacityCheckController {
-  /**
-   * @param {ScheduleController} scheduleController
-   * 
-   * 初期化例:
-   * const storage = new StorageService();
-   * const schedule = new ScheduleController(storage);
-   * const capacity = new CapacityCheckController(schedule);
-   */
-  constructor(scheduleController) {
-    if (!scheduleController) {
-      throw new Error('ScheduleController is required');
+  // 🆕 起動時は空の状態
+  async loadUsers() {
+    const savedUsers = await this.storageService.loadUsers();
+    if (savedUsers && savedUsers.length > 0) {
+      this.users = savedUsers;
+    } else {
+      this.users = [];
+      // 起動時メッセージを表示
+      this.showEmptyMessage();
     }
-    
-    this.scheduleController = scheduleController;
-    
-    // イベントリスナー設定
-    this.scheduleController.on('cellUpdated', () => {
-      Logger?.debug('Cell updated, capacity check triggered');
-    });
   }
-  
-  // ... メソッド
-}
-```
 
-### 4.3 NoteController
-
-```javascript
-class NoteController extends EventEmitter {
-  /**
-   * @param {StorageService} storageService
-   * 
-   * 初期化例:
-   * const storage = new StorageService();
-   * const noteController = new NoteController(storage);
-   */
-  constructor(storageService) {
-    super();
-    
-    if (!storageService) {
-      throw new Error('StorageService is required');
-    }
-    
-    this.storageService = storageService;
-    this.notes = new Map();
+  // 🆕 空のグリッド時のメッセージ表示
+  showEmptyMessage() {
+    console.log('利用者データがありません。CSVファイルを読み込んでください。');
   }
-  
-  // ... メソッド
-}
-```
 
-### 4.4 ExcelController
+  // 🆕 セル入力ごとに自動保存
+  async updateCell(userId, date, cellType, value) {
+    const calendar = this.calendars.get(userId);
+    if (!calendar) return;
 
-```javascript
-class ExcelController {
-  /**
-   * @param {ExcelService} excelService
-   * @param {ScheduleController} scheduleController
-   * 
-   * 初期化例:
-   * const excelService = new ExcelService();
-   * const storage = new StorageService();
-   * const schedule = new ScheduleController(storage);
-   * const excel = new ExcelController(excelService, schedule);
-   */
-  constructor(excelService, scheduleController) {
-    if (!excelService) {
-      throw new Error('ExcelService is required');
-    }
-    if (!scheduleController) {
-      throw new Error('ScheduleController is required');
-    }
+    calendar.setCell(date, value);
     
-    this.excelService = excelService;
-    this.scheduleController = scheduleController;
+    // 自動保存（AppConfigの設定に従う）
+    if (AppConfig.STORAGE.AUTO_SAVE) {
+      await this.saveSchedule();
+    }
+
+    // 定員チェック
+    this.checkCapacity(date);
   }
-  
-  // ... メソッド
 }
 ```
 
 ---
 
-## 5. Presentation Layer（修正版）
+## 5. サービス層の詳細
 
-### 5.1 App クラス
-
-```javascript
-class App extends EventEmitter {
-  constructor() {
-    super();
-    
-    this.currentYearMonth = null;
-    this.controllers = {};
-    this.components = {};
-    this.isInitialized = false;
-  }
-  
-  async init() {
-    try {
-      // 1. コントローラー初期化（Appの責務）
-      this.initControllers();
-      
-      // 2. データ読み込み
-      this.controllers.schedule.loadUsers();
-      this.controllers.note.loadNotes();
-      
-      // 3. デフォルト月設定
-      const now = new Date();
-      this.currentYearMonth = DateUtils.getCurrentYearMonth();
-      this.controllers.schedule.loadSchedule(this.currentYearMonth);
-      
-      // 4. UIコンポーネント初期化
-      this.initComponents();
-      
-      // 5. イベントリスナー設定
-      this.setupEventListeners();
-      
-      // 6. 初回レンダリング
-      this.render();
-      
-      this.isInitialized = true;
-      Logger?.info('App initialization completed');
-      
-    } catch (error) {
-      Logger?.error('App initialization failed:', error);
-      throw error;
-    }
-  }
-  
-  /**
-   * コントローラー初期化
-   * 注意: この処理はApp.jsのみで行う。main.jsでは行わない。
-   */
-  initControllers() {
-    const storage = new StorageService();
-    const excelService = new ExcelService();
-    
-    // 依存関係の順序を厳守
-    this.controllers.schedule = new ScheduleController(storage);
-    this.controllers.capacity = new CapacityCheckController(this.controllers.schedule);
-    this.controllers.note = new NoteController(storage);
-    this.controllers.excel = new ExcelController(excelService, this.controllers.schedule);
-    
-    Logger?.info('Controllers initialized');
-  }
-  
-  // ... 他のメソッド
-}
-```
-
----
-
-## 6. main.jsの責務定義（新規追加）
-
-### 6.1 main.jsの役割
-
-**唯一の責務**: アプリケーションのブートストラップ
-
-### 6.2 やること
-
-1. ✅ 依存関係チェック
-2. ✅ Appクラスのインスタンス化と初期化
-3. ✅ グローバルエラーハンドリング
-4. ✅ デバッグ用のグローバル登録
-
-### 6.3 やらないこと
-
-- ❌ Controller個別の初期化（App.jsの責務）
-- ❌ UIの構築（各Componentの責務）
-- ❌ テストコードの実行（別ファイルに分離すべき）
-
-### 6.4 正しいmain.js実装
+### 5.1 StorageService
 
 ```javascript
-document.addEventListener('DOMContentLoaded', async () => {
-  try {
-    Logger.info('=== Application Starting ===');
-    
-    // 依存関係チェック
-    const dependencies = [
-      // Phase 1-A
-      'Logger', 'EventEmitter', 'DateUtils', 'IdGenerator', 'AppConfig',
-      // Phase 1-B
-      'User', 'Note', 'ScheduleCell', 'StayPeriod', 'ScheduleCalendar',
-      'DailyCapacity', 'ServiceCapacity',
-      // Phase 1-C
-      'StorageService', 'ExcelService',
-      // Phase 1-D
-      'ScheduleController', 'CapacityCheckController', 'NoteController', 'ExcelController',
-      // Phase 1-E
-      'App', 'ScheduleGrid', 'CellEditor', 'Toolbar', 'CapacityIndicator', 'NotePanel'
-    ];
-    
-    const missing = dependencies.filter(dep => typeof window[dep] === 'undefined');
-    
-    if (missing.length > 0) {
-      throw new Error(`Missing dependencies: ${missing.join(', ')}`);
-    }
-    
-    Logger.info('All dependencies loaded');
-    
-    // Appクラスに全て委譲
-    const app = new App();
-    await app.init();
-    
-    // デバッグ用
-    window.app = app;
-    
-    Logger.info('=== Application Ready ===');
-    
-  } catch (error) {
-    Logger.error('Application failed to start:', error);
-    
-    // エラー表示
-    const appContainer = document.getElementById('app');
-    if (appContainer) {
-      appContainer.innerHTML = `
-        <div class="error-container">
-          <h1>初期化エラー</h1>
-          <p>${error.message}</p>
-          <button onclick="location.reload()">再読み込み</button>
-        </div>
-      `;
-    }
-  }
-});
-```
-
----
-
-## 7. 初期化シーケンス（新規追加）
-
-### 7.1 全体フロー
-
-```
-main.js起動
-  ↓
-依存関係チェック
-  ↓
-App.init()
-  ├─ initControllers()
-  │   ├─ StorageService生成
-  │   ├─ ExcelService生成
-  │   ├─ ScheduleController生成
-  │   ├─ CapacityCheckController生成
-  │   ├─ NoteController生成
-  │   └─ ExcelController生成
-  ├─ データ読み込み
-  │   ├─ loadUsers()
-  │   └─ loadNotes()
-  ├─ デフォルト月設定
-  │   └─ loadSchedule(yearMonth)
-  ├─ initComponents()
-  │   ├─ ScheduleGrid生成
-  │   ├─ CellEditor生成
-  │   ├─ Toolbar生成
-  │   ├─ CapacityIndicator生成
-  │   └─ NotePanel生成
-  ├─ setupEventListeners()
-  └─ render()
-```
-
-### 7.2 依存関係の初期化順序
-
-**レベル0**: ユーティリティ（依存なし）
-- Logger, EventEmitter, DateUtils, IdGenerator, AppConfig
-
-**レベル1**: サービス（ユーティリティに依存）
-- StorageService, ExcelService
-
-**レベル2**: コントローラー（サービスに依存）
-- ScheduleController（StorageService）
-- NoteController（StorageService）
-
-**レベル3**: コントローラー（他のコントローラーに依存）
-- CapacityCheckController（ScheduleController）
-- ExcelController（ExcelService, ScheduleController）
-
-**レベル4**: App（全コントローラーに依存）
-- App
-
-**レベル5**: コンポーネント（Appに依存）
-- ScheduleGrid, CellEditor, Toolbar, CapacityIndicator, NotePanel
-
----
-
-## 8. エラーハンドリングの責任分離（新規追加）
-
-### 8.1 レイヤー別の責務
-
-| レイヤー | 責務 | エラー処理 |
-|---------|------|-----------|
-| main.js | ブートストラップ | try-catch → ユーザーへの通知 |
-| App.js | アプリ初期化 | try-catch → throw（main.jsに委譲）|
-| Controllers | ビジネスロジック | try-catch → ログ + falseを返す |
-| Components | UI更新 | try-catch → ログ + エラー表示 |
-| Services | データ永続化 | try-catch → ログ + nullまたはfalse |
-
-### 8.2 エラーの伝播ルール
-
-```javascript
-// Services: エラーを吸収してfalse/nullを返す
 class StorageService {
-  save(key, data) {
+  constructor() {
+    this.prefix = AppConfig.STORAGE.PREFIX;
+    this.maxMonths = AppConfig.STORAGE.MAX_MONTHS;
+  }
+
+  // 🆕 1ヶ月分のみ保持
+  async saveSchedule(yearMonth, data) {
+    const key = `${this.prefix}schedule_${yearMonth}`;
+    
+    // 容量超過時は古いデータを削除
+    if (this.isStorageQuotaExceeded()) {
+      await this.deleteOldestMonth();
+    }
+
     try {
-      // ... 保存処理
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+      if (e.name === 'QuotaExceededError') {
+        // 古いデータを削除して再試行
+        await this.deleteOldestMonth();
+        localStorage.setItem(key, JSON.stringify(data));
+      }
+    }
+  }
+
+  // 🆕 最古の月を削除
+  async deleteOldestMonth() {
+    const keys = Object.keys(localStorage)
+      .filter(key => key.startsWith(`${this.prefix}schedule_`))
+      .sort();
+    
+    if (keys.length > 0) {
+      localStorage.removeItem(keys[0]);
+    }
+  }
+
+  // 🆕 容量チェック
+  isStorageQuotaExceeded() {
+    try {
+      const testKey = `${this.prefix}test`;
+      const testData = new Array(100000).join('a'); // 約100KB
+      localStorage.setItem(testKey, testData);
+      localStorage.removeItem(testKey);
+      return false;
+    } catch (e) {
       return true;
-    } catch (error) {
-      Logger?.error('Save failed:', error);
-      return false;  // ❌ throwしない
     }
   }
 }
-
-// Controllers: エラーを吸収してfalse/nullを返す
-class ScheduleController {
-  updateCell(userId, date, cellType, value) {
-    try {
-      // ... 更新処理
-      return true;
-    } catch (error) {
-      Logger?.error('Update failed:', error);
-      return false;  // ❌ throwしない
-    }
-  }
-}
-
-// App: 致命的エラーのみthrow
-class App {
-  async init() {
-    try {
-      // ... 初期化処理
-    } catch (error) {
-      Logger?.error('Init failed:', error);
-      throw error;  // ✅ main.jsに委譲
-    }
-  }
-}
-
-// main.js: 最終的なエラーハンドリング
-document.addEventListener('DOMContentLoaded', async () => {
-  try {
-    await app.init();
-  } catch (error) {
-    // ✅ ユーザーに通知
-    showErrorUI(error);
-  }
-});
 ```
 
 ---
 
-## 9. Phase別実装範囲
-
-### Phase 1-A: 基盤構築
-1. ✅ **基礎ユーティリティ**
-   - Logger
-   - EventEmitter
-   - DateUtils
-   - IdGenerator
-
-2. **Domain Models**
-   - User
-   - ScheduleCell
-   - StayPeriod
-   - ScheduleCalendar
-   - ServiceCapacity
-   - DailyCapacity
-   - Note
-
-3. **Infrastructure**
-   - StorageService
-   - ExcelService（SheetJS統合）
-
-### Phase 1-B: 予定管理
-4. **Controllers**
-   - ScheduleController
-   - NoteController
-
-5. **Components**
-   - App（メイン）
-   - ScheduleGrid（グリッド表示）
-   - CellEditor（セル編集）
-
-### Phase 1-C: 定員チェック
-6. **Controller**
-   - CapacityCheckController
-
-7. **Component**
-   - CapacityIndicator（定員表示）
-   - Toolbar（ツールバー）
-
-### Phase 1-D: Excel連携
-8. **Controller**
-   - ExcelController
-
-9. **機能**
-   - Excel入力（現行フォーマット）
-   - Excel出力（現行フォーマット）
-
-### Phase 1-E: 備考機能
-10. **Component**
-    - NotePanel（備考パネル）
-
-11. **機能**
-    - 利用者備考の表示・編集
-    - セル備考の表示・編集
-    - 備考アイコン表示
-
----
-
-## 10. ファイル構成
-
-```
-project/
-├── index.html
-├── README.md
-├── css/
-│   ├── variables.css
-│   ├── reset.css
-│   ├── main.css
-│   ├── components.css
-│   ├── toolbar.css
-│   ├── grid.css
-│   ├── modal.css
-│   ├── note-panel.css
-│   └── capacity-indicator.css
-├── js/
-│   ├── config.js
-│   ├── main.js
-│   ├── utils/                     # Phase 1-A
-│   │   ├── Logger.js
-│   │   ├── EventEmitter.js
-│   │   ├── IdGenerator.js
-│   │   └── DateUtils.js
-│   ├── data/
-│   │   └── users.js               # DEFAULT_USERS
-│   ├── models/                    # Phase 1-A
-│   │   ├── User.js
-│   │   ├── ScheduleCell.js
-│   │   ├── StayPeriod.js
-│   │   ├── ScheduleCalendar.js
-│   │   ├── ServiceCapacity.js
-│   │   ├── DailyCapacity.js
-│   │   └── Note.js
-│   ├── services/                  # Phase 1-A
-│   │   ├── StorageService.js
-│   │   └── ExcelService.js
-│   ├── controllers/               # Phase 1-B, 1-C, 1-D
-│   │   ├── ScheduleController.js
-│   │   ├── CapacityCheckController.js
-│   │   ├── NoteController.js
-│   │   └── ExcelController.js
-│   └── components/                # Phase 1-B, 1-C, 1-E
-│       ├── App.js
-│       ├── ScheduleGrid.js
-│       ├── CellEditor.js
-│       ├── Toolbar.js
-│       ├── CapacityIndicator.js
-│       └── NotePanel.js
-└── libs/
-    └── xlsx.full.min.js          # SheetJS
-```
-
----
-
-## 11. ブラウザ環境の実装制約
-
-### 11.1 モジュールシステム
-
-**制約**: ES6 ModulesやCommonJSは使用せず、従来のscriptタグで読み込み
-
-**理由**:
-- シンプルな静的ファイル配信
-- 複雑な設定不要
-- 既存の開発フローとの親和性
-
-### 11.2 グローバルオブジェクト管理
-
-```javascript
-// 全てのクラスをwindowオブジェクトに登録
-window.Logger = Logger;
-window.ScheduleController = ScheduleController;
-// ...
-```
-
-### 11.3 HTMLでの読み込み順序
+## 6. HTMLでの読み込み順序（修正版）
 
 ```html
-<!-- Phase 1-A: 基盤 -->
-<script src="js/config.js"></script>
-<script src="js/utils/Logger.js"></script>
-<script src="js/utils/EventEmitter.js"></script>
-<script src="js/utils/IdGenerator.js"></script>
-<script src="js/utils/DateUtils.js"></script>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>小規模多機能利用調整システム</title>
+  <link rel="stylesheet" href="css/reset.css">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/themes.css">
+</head>
+<body>
+  <div id="app"></div>
 
-<!-- マスタデータ -->
-<script src="js/data/users.js"></script>
+  <!-- 外部ライブラリ -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 
-<!-- Models -->
-<script src="js/models/User.js"></script>
-<script src="js/models/ScheduleCell.js"></script>
-<script src="js/models/StayPeriod.js"></script>
-<script src="js/models/ScheduleCalendar.js"></script>
-<script src="js/models/ServiceCapacity.js"></script>
-<script src="js/models/DailyCapacity.js"></script>
-<script src="js/models/Note.js"></script>
+  <!-- Phase 0: 基盤 -->
+  <script src="js/config/AppConfig.js"></script>
+  <script src="js/utils/Logger.js"></script>
+  <script src="js/utils/EventEmitter.js"></script>
+  <script src="js/utils/IdGenerator.js"></script>
+  <script src="js/utils/DateUtils.js"></script>
 
-<!-- Services -->
-<script src="js/services/StorageService.js"></script>
-<script src="js/services/ExcelService.js"></script>
+  <!-- Models -->
+  <script src="js/models/User.js"></script>
+  <script src="js/models/ScheduleCell.js"></script>
+  <script src="js/models/StayPeriod.js"></script>
+  <script src="js/models/ScheduleCalendar.js"></script>
+  <script src="js/models/DailyCapacity.js"></script>
+  <script src="js/models/ServiceCapacity.js"></script>
+  <script src="js/models/Note.js"></script>
 
-<!-- Controllers -->
-<script src="js/controllers/ScheduleController.js"></script>
-<script src="js/controllers/CapacityCheckController.js"></script>
-<script src="js/controllers/NoteController.js"></script>
-<script src="js/controllers/ExcelController.js"></script>
+  <!-- Services -->
+  <script src="js/services/StorageService.js"></script>
+  <script src="js/services/ExcelService.js"></script>
+  <script src="js/services/CSVService.js"></script>
 
-<!-- Components -->
-<script src="js/components/CellEditor.js"></script>
-<script src="js/components/ScheduleGrid.js"></script>
-<script src="js/components/NotePanel.js"></script>
-<script src="js/components/CapacityIndicator.js"></script>
-<script src="js/components/Toolbar.js"></script>
-<script src="js/components/App.js"></script>
+  <!-- Controllers -->
+  <script src="js/controllers/ScheduleController.js"></script>
+  <script src="js/controllers/CapacityCheckController.js"></script>
+  <script src="js/controllers/NoteController.js"></script>
+  <script src="js/controllers/ExcelController.js"></script>
 
-<!-- 外部ライブラリ -->
-<script src="libs/xlsx.full.min.js"></script>
+  <!-- Components -->
+  <script src="js/components/CellEditor.js"></script>
+  <script src="js/components/ScheduleGrid.js"></script>
+  <script src="js/components/NotePanel.js"></script>
+  <script src="js/components/CapacityIndicator.js"></script>
+  <script src="js/components/Toolbar.js"></script>
+  <script src="js/components/App.js"></script>
 
-<!-- アプリケーション起動 -->
-<script src="js/main.js"></script>
+  <!-- アプリケーション起動 -->
+  <script src="js/main.js"></script>
+</body>
+</html>
 ```
 
 ---
 
-## 12. UI設計の概要
+## 7. 参照ドキュメント
 
-### 12.1 画面レイアウト
+### 要件定義書v1.0
+- [要件定義書_概要_v1.0.md](./requirements/overview.md)
+- [要件定義書_データ管理_v1.0.md](./requirements/data-management.md)
+- [要件定義書_月間管理_v1.0.md](./requirements/monthly-management.md)
+- [要件定義書_予定入力_v1.0.md](./requirements/schedule-input.md)
+- [要件定義書_定員管理_v1.0.md](./requirements/capacity-management.md)
+- [要件定義書_Excel入出力_v1.0.md](./requirements/excel-io.md)
+- [要件定義書_UI_v1.0.md](./requirements/ui.md)
+- [要件定義書_技術仕様_v1.0.md](./requirements/technical.md)
 
-```
-┌─────────────────────────────────────────┐
-│ ツールバー                               │
-│ [月選択▼] [Excel入力] [Excel出力]       │
-│ [定員チェック] [利用者管理]             │
-├─────────────────────────────────────────┤
-│ 定員表示バー                             │
-│ 通い: 12/15 ✓ | 泊り: 7/9 ✓            │
-├─────────────────────────────────────────┤
-│ 予定グリッド (画面の80%)                 │
-│ ┌────┬──┬──┬──┬──┬──┬──┬──┐ │
-│ │利用者│1 │2 │3 │4 │5 │...│備考│ │
-│ ├────┼──┼──┼──┼──┼──┼──┼──┤ │
-│ │青柳  │通泊│1 │  │  │  │入所│...│📝│ │
-│ │美秋  │訪問│  │  │  │  │  │  │...│  │ │
-│ ├────┼──┼──┼──┼──┼──┼──┼──┤ │
-│ │安藤  │通泊│入所│  │  │退所│  │...│  │ │
-│ │敏子  │訪問│1 │  │  │1 │  │...│📝│ │
-│ └────┴──┴──┴──┴──┴──┴──┴──┘ │
-│                                         │
-│ ※オーバー日は赤背景                     │
-├─────────────────────────────────────────┤
-│ ステータスバー                           │
-│ 登録: 29名 | 表示月: 2025年12月         │
-└─────────────────────────────────────────┘
-```
-
-### 12.2 備考パネル（スライドイン）
-
-```
-┌─ 備考 ───────────────┐
-│                       │
-│ 【安藤 敏子】         │
-│                       │
-│ ┌─────────────────┐  │
-│ │この日は家族行事   │  │
-│ │のため不可         │  │
-│ └─────────────────┘  │
-│                       │
-│ [保存] [削除] [閉じる]│
-└───────────────────────┘
-```
+### 設計書
+- [データモデル設計書_v3.0.md](./design/data-model.md)
+- [実装ガイド_Phase0.md](./guides/implementation-phase0.md)
+- [未確定項目リスト_v2.0.md](./todos/undecided-items.md)
 
 ---
 
-## 13. データ構造の例
+## 8. 実装チェックリスト
 
-### 13.1 利用者データ（DEFAULT_USERS）
+### Phase 0-A: User拡張 ✓
+- [ ] sortIdプロパティ追加
+- [ ] toJSON/fromJSON更新
+- [ ] 後方互換性確認
 
-```javascript
-[
-  {
-    id: "user001",
-    name: "青柳 美秋",
-    registrationDate: "2025-01-01",
-    note: "金曜日は家族の迎えあり",
-    isActive: true
-  },
-  // ... 29名分
-]
-```
+### Phase 0-B: 特別セル対応 ✓
+- [ ] 特別セル判定メソッド実装
+- [ ] 特別セルgetter/setter実装
+- [ ] calculateCrossMonthStay実装
+- [ ] getDaysInMonth修正（33セル）
 
-### 13.2 予定データ（LocalStorage保存形式）
+### Phase 0-C: 定員カウント修正 ✓
+- [ ] getDayCountContribution実装
+- [ ] calculateAllFlags修正
+- [ ] DailyCapacity前半後半対応
+- [ ] ServiceCapacity集計修正
 
-```javascript
-{
-  "schedule_2025-12": {
-    "user001": {
-      userId: "user001",
-      yearMonth: "2025-12",
-      cells: {
-        "2025-12-01_dayStay": {
-          userId: "user001",
-          date: "2025-12-01",
-          cellType: "dayStay",
-          inputValue: "入所",
-          actualFlags: { day: true, stay: true, visit: 0 }
-        },
-        "2025-12-01_visit": {
-          userId: "user001",
-          date: "2025-12-01",
-          cellType: "visit",
-          inputValue: "1",
-          actualFlags: { day: false, stay: false, visit: 1 }
-        }
-      },
-      stayPeriods: [
-        {
-          startDate: "2025-12-01",
-          endDate: "2025-12-05",
-          userId: "user001"
-        }
-      ]
-    }
-  }
-}
-```
-
-### 13.3 備考データ
-
-```javascript
-[
-  {
-    id: "note001",
-    targetType: "cell",
-    targetId: "user001_2025-12-05_dayStay",
-    content: "この日は家族行事のため不可",
-    createdAt: "2025-12-01T10:00:00Z",
-    updatedAt: "2025-12-01T10:00:00Z"
-  },
-  // ...
-]
-```
+### Phase 0-D: AppConfig拡張 ✓
+- [ ] SYMBOLS定義
+- [ ] CAPACITY定義
+- [ ] VISUAL定義
+- [ ] STORAGE定義
 
 ---
 
-## 14. 次のステップ
+## 9. 次のステップ
 
-### Phase 1-A開始の準備
-1. プロジェクトフォルダ作成
-2. index.html作成
-3. 基礎ファイル（config.js, main.js）作成
-4. CSSファイル準備
+### Phase 0完了後
+1. **Phase 1-A: 基本機能実装**
+   - CSVService実装
+   - 基本的な予定入力
+   - 定員チェック表示
 
-### 最初の実装対象
-1. **Logger.js** - ログ出力
-2. **EventEmitter.js** - イベント管理
-3. **DateUtils.js** - 日付処理
-4. **IdGenerator.js** - ID生成
+2. **Phase 1-B: UI実装**
+   - ScheduleGrid実装
+   - Toolbar実装
+   - CapacityIndicator実装
 
-### 確認事項
-- ブラウザで index.html を開いて動作確認
-- コンソールにエラーが出ないか
-- LocalStorageが使えるか
-
----
-
-## 15. 変更履歴
-
-| 日付 | 版 | 変更内容 | 担当 |
-|------|-----|----------|------|
-| 2025-05-14 | 1.0 | 初版作成 | - |
-| 2025-05-14 | 1.1 | 資格管理機能を追加 | - |
-| 2025-10-26 | 1.2 | 組織階層対応 | - |
-| 2025-11-02 | 1.3 | ブラウザ環境の実装制約を追加 | GitHub Copilot |
-| 2025-11-09 | 1.4 | Phase 0追加、StorageService使用方法明記 | Claude |
-| 2025-11-11 | 1.5 | コンストラクタ仕様明確化、依存関係グラフ追加、main.js責務定義 | Claude（実装フィードバック反映）|
-| **2025-11-11** | **1.6** | **統合版：詳細なクラス図、処理フロー、UI設計、Phase別実装範囲を復元統合** | **GitHub Copilot（デグレード修正）** |
+3. **Phase 1-C: Excel入出力**
+   - ExcelService実装
+   - ファイル保存・読込
+   - データ検証
 
 ---
 
-**この設計書は実装完了後のフィードバックを反映し、削除された重要な詳細情報を復元した統合版です。**
+**作成者**: Claude  
+**最終更新**: 2025年11月14日  
+**バージョン**: 1.8  
+**ステータス**: Phase 0実装準備完了

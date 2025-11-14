@@ -1,393 +1,267 @@
 /**
- * 小規模多機能利用調整システム - StayPeriodモデル
- * 宿泊期間（入所〜退所）を表すモデルクラス
+ * StayPeriodクラス（宿泊期間）
+ * 入所から退所までの期間を管理
  */
-
 class StayPeriod {
-  /**
-   * StayPeriodコンストラクタ
-   * @param {Date|string} startDate - 入所日
-   * @param {Date|string} endDate - 退所日
-   * @param {string} userId - 利用者ID
-   */
-  constructor(startDate, endDate, userId) {
-    // 依存関係チェック
-    if (typeof window.DateUtils === 'undefined') {
-      throw new Error('StayPeriod model requires DateUtils utility');
+    /**
+     * コンストラクタ
+     * @param {object} data - 宿泊期間データ
+     */
+    constructor(data = {}) {
+        this.startDate = data.startDate ? this._parseDate(data.startDate) : null;
+        this.endDate = data.endDate ? this._parseDate(data.endDate) : null;
+        this.userId = data.userId || '';
+        this.note = data.note || '';
+        
+        this.logger = new Logger('StayPeriod');
     }
 
-    // 必須パラメータチェック
-    if (!startDate || !endDate || !userId) {
-      throw new Error('startDate, endDate, and userId are required');
+    /**
+     * 日付を解析してDateオブジェクトに変換
+     * @param {Date|string} date - 日付
+     * @returns {Date}
+     * @private
+     */
+    _parseDate(date) {
+        if (date instanceof Date) {
+            return date;
+        }
+        if (typeof date === 'string') {
+            return DateUtils.parseDate(date);
+        }
+        return null;
     }
 
-    this.userId = userId;
+    /**
+     * 宿泊期間が妥当かどうか
+     * @returns {boolean}
+     */
+    isValid() {
+        if (!this.startDate || !this.endDate) {
+            return false;
+        }
 
-    // 日付の処理
-    this.startDate = this._parseDate(startDate, 'startDate');
-    this.endDate = this._parseDate(endDate, 'endDate');
-
-    // バリデーション
-    this._validate();
-  }
-
-  /**
-   * 日付文字列をDateオブジェクトに変換
-   * @param {Date|string} date - 変換する日付
-   * @param {string} paramName - パラメータ名（エラー表示用）
-   * @returns {Date} Dateオブジェクト
-   * @private
-   */
-  _parseDate(date, paramName) {
-    if (date instanceof Date) {
-      return new Date(date);
+        // 開始日 <= 終了日
+        return this.startDate <= this.endDate;
     }
 
-    if (typeof date === 'string') {
-      try {
-        return window.DateUtils.parseDate(date);
-      } catch (error) {
-        throw new Error(`Invalid ${paramName} format: ${date}`);
-      }
+    /**
+     * 宿泊期間の日数を取得
+     * @returns {number} 日数（開始日〜終了日を含む）
+     */
+    getDuration() {
+        if (!this.isValid()) {
+            return 0;
+        }
+
+        const diffTime = this.endDate.getTime() - this.startDate.getTime();
+        return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;  // +1は開始日を含むため
     }
 
-    throw new Error(`${paramName} must be a Date object or date string`);
-  }
+    /**
+     * 指定月に含まれる日付のみを取得
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {Array<Date>}
+     */
+    getDatesInMonth(yearMonth) {
+        if (!this.isValid()) {
+            return [];
+        }
 
-  /**
-   * バリデーション
-   * @private
-   */
-  _validate() {
-    // userIdの検証
-    if (!this.userId || typeof this.userId !== 'string') {
-      throw new Error('userId must be a non-empty string');
+        const dates = [];
+        const {year, month} = DateUtils.parseYearMonth(yearMonth);
+        const monthStart = new Date(year, month - 1, 1);
+        const monthEnd = new Date(year, month, 0);
+
+        // 宿泊期間と月の範囲の重なりを計算
+        const periodStart = this.startDate > monthStart ? this.startDate : monthStart;
+        const periodEnd = this.endDate < monthEnd ? this.endDate : monthEnd;
+
+        // 重なりがない場合
+        if (periodStart > periodEnd) {
+            return [];
+        }
+
+        // 日付を列挙
+        const current = new Date(periodStart);
+        while (current <= periodEnd) {
+            dates.push(new Date(current));
+            current.setDate(current.getDate() + 1);
+        }
+
+        return dates;
     }
 
-    // 日付の検証
-    if (!(this.startDate instanceof Date) || isNaN(this.startDate.getTime())) {
-      throw new Error('Invalid startDate');
+    /**
+     * 指定日が宿泊期間に含まれるかどうか
+     * @param {Date|string} date - 日付
+     * @returns {boolean}
+     */
+    includesDate(date) {
+        if (!this.isValid()) {
+            return false;
+        }
+
+        const targetDate = this._parseDate(date);
+        if (!targetDate) {
+            return false;
+        }
+
+        // 時刻を無視して日付のみで比較
+        const target = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+        const start = new Date(this.startDate.getFullYear(), this.startDate.getMonth(), this.startDate.getDate());
+        const end = new Date(this.endDate.getFullYear(), this.endDate.getMonth(), this.endDate.getDate());
+
+        return target >= start && target <= end;
     }
 
-    if (!(this.endDate instanceof Date) || isNaN(this.endDate.getTime())) {
-      throw new Error('Invalid endDate');
+    /**
+     * 他の宿泊期間と重複するかどうか
+     * @param {StayPeriod} other - 他の宿泊期間
+     * @returns {boolean}
+     */
+    overlaps(other) {
+        if (!this.isValid() || !other.isValid()) {
+            return false;
+        }
+
+        // 期間が重複する条件:
+        // this.start <= other.end AND this.end >= other.start
+        return this.startDate <= other.endDate && this.endDate >= other.startDate;
     }
 
-    // 期間の妥当性チェック
-    if (!this.isValid()) {
-      throw new Error('startDate must be less than or equal to endDate');
-    }
-  }
+    /**
+     * 指定月と重複するかどうか
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {boolean}
+     */
+    overlapsMonth(yearMonth) {
+        if (!this.isValid()) {
+            return false;
+        }
 
-  /**
-   * 期間が妥当かどうかをチェック
-   * @returns {boolean} startDate <= endDate かどうか
-   */
-  isValid() {
-    return this.startDate.getTime() <= this.endDate.getTime();
-  }
+        const monthStart = DateUtils.getFirstDayOfMonth(yearMonth);
+        const monthEnd = DateUtils.getLastDayOfMonth(yearMonth);
 
-  /**
-   * 期間内の全日付配列を生成
-   * @returns {Date[]} 期間内の全日付のDateオブジェクト配列
-   */
-  getDates() {
-    const dates = [];
-    let current = new Date(this.startDate);
-
-    while (current.getTime() <= this.endDate.getTime()) {
-      dates.push(new Date(current));
-      current = window.DateUtils.addDays(current, 1);
+        return this.startDate <= monthEnd && this.endDate >= monthStart;
     }
 
-    return dates;
-  }
+    /**
+     * 前月から継続する宿泊期間かどうか
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {boolean}
+     */
+    startsBeforeMonth(yearMonth) {
+        if (!this.isValid()) {
+            return false;
+        }
 
-  /**
-   * 指定日が期間に含まれるかチェック
-   * @param {Date|string} date - チェックする日付
-   * @returns {boolean} 期間に含まれるかどうか
-   */
-  includes(date) {
-    try {
-      const targetDate = this._parseDate(date, 'target date');
-      return window.DateUtils.isDateInRange(targetDate, this.startDate, this.endDate);
-    } catch (error) {
-      window.Logger?.warn('Error checking if date is included in period:', error);
-      return false;
-    }
-  }
-
-  /**
-   * 宿泊日数を取得（endDate - startDate + 1）
-   * @returns {number} 宿泊日数
-   */
-  getDuration() {
-    const days = window.DateUtils.daysBetween(this.startDate, this.endDate);
-    return days + 1; // 当日を含むため+1
-  }
-
-  /**
-   * 期間の長さを取得（endDate - startDate）
-   * @returns {number} 期間の長さ（日数）
-   */
-  getLength() {
-    return window.DateUtils.daysBetween(this.startDate, this.endDate);
-  }
-
-  /**
-   * 開始日の文字列を取得
-   * @param {string} format - フォーマット（デフォルト: 'YYYY-MM-DD'）
-   * @returns {string} フォーマットされた開始日文字列
-   */
-  getStartDateString(format = 'YYYY-MM-DD') {
-    return window.DateUtils.formatDate(this.startDate, format);
-  }
-
-  /**
-   * 終了日の文字列を取得
-   * @param {string} format - フォーマット（デフォルト: 'YYYY-MM-DD'）
-   * @returns {string} フォーマットされた終了日文字列
-   */
-  getEndDateString(format = 'YYYY-MM-DD') {
-    return window.DateUtils.formatDate(this.endDate, format);
-  }
-
-  /**
-   * 期間の文字列表現を取得
-   * @param {string} format - 日付フォーマット
-   * @param {string} separator - 区切り文字（デフォルト: ' ~ '）
-   * @returns {string} 期間の文字列表現
-   */
-  getPeriodString(format = 'YYYY-MM-DD', separator = ' ~ ') {
-    const start = this.getStartDateString(format);
-    const end = this.getEndDateString(format);
-    
-    if (window.DateUtils.isSameDate(this.startDate, this.endDate)) {
-      return start; // 同じ日の場合は1つだけ表示
-    }
-    
-    return `${start}${separator}${end}`;
-  }
-
-  /**
-   * 期間が今月に含まれるかチェック
-   * @param {string} yearMonth - 年月文字列（YYYY-MM形式）
-   * @returns {boolean} 今月に含まれるかどうか
-   */
-  isInMonth(yearMonth) {
-    try {
-      const monthDates = window.DateUtils.getMonthDates(yearMonth);
-      if (monthDates.length === 0) {
-        return false;
-      }
-
-      const monthStart = monthDates[0];
-      const monthEnd = monthDates[monthDates.length - 1];
-
-      // 期間が月と重複するかチェック
-      return this.startDate <= monthEnd && this.endDate >= monthStart;
-    } catch (error) {
-      window.Logger?.warn('Error checking if period is in month:', error);
-      return false;
-    }
-  }
-
-  /**
-   * 期間が週末を含むかチェック
-   * @returns {boolean} 週末を含むかどうか
-   */
-  includesWeekend() {
-    const dates = this.getDates();
-    return dates.some(date => window.DateUtils.isWeekend(date));
-  }
-
-  /**
-   * 期間内の週末日数を取得
-   * @returns {number} 週末日数
-   */
-  getWeekendDays() {
-    const dates = this.getDates();
-    return dates.filter(date => window.DateUtils.isWeekend(date)).length;
-  }
-
-  /**
-   * 期間内の平日日数を取得
-   * @returns {number} 平日日数
-   */
-  getWeekdays() {
-    const total = this.getDuration();
-    const weekends = this.getWeekendDays();
-    return total - weekends;
-  }
-
-  /**
-   * 他の期間と重複するかチェック
-   * @param {StayPeriod} other - 比較対象の期間
-   * @returns {boolean} 重複するかどうか
-   */
-  overlaps(other) {
-    if (!(other instanceof StayPeriod)) {
-      return false;
+        const monthStart = DateUtils.getFirstDayOfMonth(yearMonth);
+        return this.startDate < monthStart;
     }
 
-    return this.startDate <= other.endDate && this.endDate >= other.startDate;
-  }
+    /**
+     * 翌月へ継続する宿泊期間かどうか
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {boolean}
+     */
+    continuesAfterMonth(yearMonth) {
+        if (!this.isValid()) {
+            return false;
+        }
 
-  /**
-   * 他の期間との重複部分を取得
-   * @param {StayPeriod} other - 比較対象の期間
-   * @returns {StayPeriod|null} 重複部分の期間（重複しない場合はnull）
-   */
-  getOverlap(other) {
-    if (!this.overlaps(other)) {
-      return null;
+        const monthEnd = DateUtils.getLastDayOfMonth(yearMonth);
+        return this.endDate > monthEnd;
     }
 
-    const overlapStart = this.startDate > other.startDate ? this.startDate : other.startDate;
-    const overlapEnd = this.endDate < other.endDate ? this.endDate : other.endDate;
-
-    try {
-      return new StayPeriod(overlapStart, overlapEnd, this.userId);
-    } catch (error) {
-      return null;
-    }
-  }
-
-  /**
-   * 期間を拡張
-   * @param {number} daysBefore - 開始日前に追加する日数
-   * @param {number} daysAfter - 終了日後に追加する日数
-   * @returns {StayPeriod} 拡張された新しい期間
-   */
-  extend(daysBefore = 0, daysAfter = 0) {
-    const newStartDate = window.DateUtils.addDays(this.startDate, -daysBefore);
-    const newEndDate = window.DateUtils.addDays(this.endDate, daysAfter);
-
-    return new StayPeriod(newStartDate, newEndDate, this.userId);
-  }
-
-  /**
-   * 期間の詳細情報を取得
-   * @returns {Object} 期間の詳細情報
-   */
-  getDetailInfo() {
-    return {
-      userId: this.userId,
-      startDate: this.getStartDateString(),
-      endDate: this.getEndDateString(),
-      duration: this.getDuration(),
-      length: this.getLength(),
-      periodString: this.getPeriodString(),
-      includesWeekend: this.includesWeekend(),
-      weekendDays: this.getWeekendDays(),
-      weekdays: this.getWeekdays(),
-      isValid: this.isValid()
-    };
-  }
-
-  /**
-   * オブジェクトをJSON形式に変換
-   * @returns {Object} JSON形式のオブジェクト
-   */
-  toJSON() {
-    return {
-      userId: this.userId,
-      startDate: this.getStartDateString(),
-      endDate: this.getEndDateString(),
-      // 追加情報
-      ...this.getDetailInfo()
-    };
-  }
-
-  /**
-   * JSON形式のデータからStayPeriodインスタンスを生成
-   * @param {Object} data - JSON形式のデータ
-   * @returns {StayPeriod} StayPeriodインスタンス
-   */
-  static fromJSON(data) {
-    if (!data || typeof data !== 'object') {
-      throw new Error('Invalid data for StayPeriod.fromJSON');
+    /**
+     * 開始日の文字列表現（YYYY-MM-DD）
+     * @returns {string}
+     */
+    getStartDateString() {
+        return this.startDate ? DateUtils.formatDate(this.startDate) : '';
     }
 
-    try {
-      return new StayPeriod(data.startDate, data.endDate, data.userId);
-    } catch (error) {
-      window.Logger?.error('Error creating StayPeriod from JSON:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 複数のJSON形式データからStayPeriodインスタンス配列を生成
-   * @param {Array} dataArray - JSON形式データの配列
-   * @returns {StayPeriod[]} StayPeriodインスタンスの配列
-   */
-  static fromJSONArray(dataArray) {
-    if (!Array.isArray(dataArray)) {
-      throw new Error('Input must be an array');
+    /**
+     * 終了日の文字列表現（YYYY-MM-DD）
+     * @returns {string}
+     */
+    getEndDateString() {
+        return this.endDate ? DateUtils.formatDate(this.endDate) : '';
     }
 
-    return dataArray.map((data, index) => {
-      try {
-        return StayPeriod.fromJSON(data);
-      } catch (error) {
-        window.Logger?.error(`Error creating StayPeriod from JSON at index ${index}:`, error);
-        throw error;
-      }
-    });
-  }
+    /**
+     * 期間の文字列表現
+     * @returns {string} 例: "2025-12-25 〜 2025-12-28 (4日間)"
+     */
+    toString() {
+        if (!this.isValid()) {
+            return '無効な期間';
+        }
 
-  /**
-   * 期間配列を開始日でソート
-   * @param {StayPeriod[]} periods - ソート対象の期間配列
-   * @returns {StayPeriod[]} ソート済みの期間配列
-   */
-  static sortByStartDate(periods) {
-    if (!Array.isArray(periods)) {
-      return [];
+        const start = this.getStartDateString();
+        const end = this.getEndDateString();
+        const duration = this.getDuration();
+
+        return `${start} 〜 ${end} (${duration}日間)`;
     }
 
-    return periods
-      .filter(period => period instanceof StayPeriod)
-      .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
-  }
-
-  /**
-   * 文字列表現を取得
-   * @returns {string} 文字列表現
-   */
-  toString() {
-    return `StayPeriod(${this.userId}): ${this.getPeriodString()} [${this.getDuration()}日間]`;
-  }
-
-  /**
-   * 2つのStayPeriodインスタンスが同じかどうかを比較
-   * @param {StayPeriod} other - 比較対象のStayPeriod
-   * @returns {boolean} 同じかどうか
-   */
-  equals(other) {
-    if (!(other instanceof StayPeriod)) {
-      return false;
+    /**
+     * JSON形式に変換
+     * @returns {object}
+     */
+    toJSON() {
+        return {
+            startDate: this.getStartDateString(),
+            endDate: this.getEndDateString(),
+            userId: this.userId,
+            note: this.note
+        };
     }
 
-    return this.userId === other.userId &&
-           window.DateUtils.isSameDate(this.startDate, other.startDate) &&
-           window.DateUtils.isSameDate(this.endDate, other.endDate);
-  }
+    /**
+     * JSONからStayPeriodインスタンスを作成
+     * @param {object} json - JSONデータ
+     * @returns {StayPeriod}
+     */
+    static fromJSON(json) {
+        return new StayPeriod(json);
+    }
 
-  /**
-   * StayPeriodインスタンスのクローンを作成
-   * @returns {StayPeriod} クローンされたStayPeriodインスタンス
-   */
-  clone() {
-    return new StayPeriod(
-      new Date(this.startDate),
-      new Date(this.endDate),
-      this.userId
-    );
-  }
+    /**
+     * 複数の宿泊期間をJSONから作成
+     * @param {Array} jsonArray - JSONデータの配列
+     * @returns {Array<StayPeriod>}
+     */
+    static fromJSONArray(jsonArray) {
+        if (!Array.isArray(jsonArray)) {
+            return [];
+        }
+        return jsonArray.map(json => StayPeriod.fromJSON(json));
+    }
+
+    /**
+     * 宿泊期間を開始日でソート
+     * @param {Array<StayPeriod>} periods - 宿泊期間の配列
+     * @returns {Array<StayPeriod>}
+     */
+    static sortByStartDate(periods) {
+        return periods.slice().sort((a, b) => {
+            if (!a.startDate || !b.startDate) return 0;
+            return a.startDate - b.startDate;
+        });
+    }
+
+    /**
+     * 指定月に重複する宿泊期間をフィルタ
+     * @param {Array<StayPeriod>} periods - 宿泊期間の配列
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {Array<StayPeriod>}
+     */
+    static filterByMonth(periods, yearMonth) {
+        return periods.filter(period => period.overlapsMonth(yearMonth));
+    }
 }
 
-// グローバルに登録
+// グローバル変数として公開
 window.StayPeriod = StayPeriod;

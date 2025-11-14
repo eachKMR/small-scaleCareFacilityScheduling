@@ -1,502 +1,623 @@
 /**
- * 小規模多機能利用調整システム - ScheduleController
- * 予定管理の中核となるコントローラークラス
- * EventEmitterを継承
+ * ScheduleControllerクラス（予定管理コントローラー）
+ * 月間予定の管理とビジネスロジックを担当
  */
-
-class ScheduleController extends EventEmitter {
-  /**
-   * コンストラクタ
-   * @param {StorageService} storageService - ストレージサービス
-   */
-  constructor(storageService) {
-    super();
-
-    // 依存関係チェック
-    if (typeof window.Logger === 'undefined') {
-      throw new Error('ScheduleController requires Logger');
-    }
-    if (typeof window.EventEmitter === 'undefined') {
-      throw new Error('ScheduleController requires EventEmitter');
-    }
-    if (typeof window.StorageService === 'undefined') {
-      throw new Error('ScheduleController requires StorageService');
-    }
-    if (typeof window.User === 'undefined') {
-      throw new Error('ScheduleController requires User model');
-    }
-    if (typeof window.ScheduleCalendar === 'undefined') {
-      throw new Error('ScheduleController requires ScheduleCalendar model');
-    }
-    if (typeof window.ScheduleCell === 'undefined') {
-      throw new Error('ScheduleController requires ScheduleCell model');
-    }
-    if (typeof window.DateUtils === 'undefined') {
-      throw new Error('ScheduleController requires DateUtils');
+class ScheduleController {
+    /**
+     * コンストラクタ
+     * @param {StorageService} storageService - ストレージサービス
+     */
+    constructor(storageService) {
+        this.storageService = storageService;
+        this.currentYearMonth = AppConfig.DEFAULTS.YEAR_MONTH;
+        this.users = [];
+        this.calendars = new Map();  // Map<userId, ScheduleCalendar>
+        this.eventEmitter = new EventEmitter();
+        this.logger = new Logger('ScheduleController');
     }
 
-    this.storageService = storageService;
-    this.currentYearMonth = null;
-    this.users = [];
-    this.calendars = new Map();
+    // ==================== 初期化 ====================
 
-    window.Logger?.info('ScheduleController initialized');
-  }
-
-  /**
-   * 利用者データを読み込み
-   */
-  loadUsers() {
-    try {
-      this.users = this.storageService.loadUsers();
-
-      // なければデフォルトユーザーを使用
-      if (this.users.length === 0 && window.DEFAULT_USERS) {
-        this.users = window.DEFAULT_USERS.map(data => new window.User(data));
-        this.saveUsers();
-        window.Logger?.info('Created users from DEFAULT_USERS:', this.users.length);
-      }
-
-      window.Logger?.info('Loaded users:', this.users.length);
-    } catch (error) {
-      window.Logger?.error('Failed to load users:', error);
-      this.users = [];
-    }
-  }
-
-  /**
-   * 利用者データを保存
-   * @returns {boolean} 成功かどうか
-   */
-  saveUsers() {
-    try {
-      const success = this.storageService.saveUsers(this.users);
-      if (success) {
-        window.Logger?.debug('Users saved successfully');
-      }
-      return success;
-    } catch (error) {
-      window.Logger?.error('Failed to save users:', error);
-      return false;
-    }
-  }
-
-  /**
-   * 指定した利用者を取得
-   * @param {string} userId - 利用者ID
-   * @returns {User|null} 利用者またはnull
-   */
-  getUser(userId) {
-    return this.users.find(user => user.id === userId) || null;
-  }
-
-  /**
-   * 利用者を追加
-   * @param {User} user - 追加する利用者
-   * @returns {boolean} 成功かどうか
-   */
-  addUser(user) {
-    try {
-      if (!(user instanceof window.User)) {
-        throw new Error('Invalid user object');
-      }
-
-      // 重複チェック
-      if (this.getUser(user.id)) {
-        window.Logger?.warn('User already exists:', user.id);
-        return false;
-      }
-
-      this.users.push(user);
-
-      // 現在の月のカレンダーがあれば、新しい利用者用のカレンダーも作成
-      if (this.currentYearMonth) {
-        const calendar = new window.ScheduleCalendar(user.id, this.currentYearMonth);
-        this.calendars.set(user.id, calendar);
-      }
-
-      this.saveUsers();
-      window.Logger?.info('User added:', user.name);
-      return true;
-    } catch (error) {
-      window.Logger?.error('Failed to add user:', error);
-      return false;
-    }
-  }
-
-  /**
-   * 予定を読み込み
-   * @param {string} yearMonth - 年月（"YYYY-MM"形式）
-   */
-  loadSchedule(yearMonth) {
-    try {
-      if (!yearMonth || !/^\d{4}-\d{2}$/.test(yearMonth)) {
-        throw new Error('Invalid yearMonth format');
-      }
-
-      this.currentYearMonth = yearMonth;
-
-      // storageから読み込み
-      const data = this.storageService.loadSchedule(yearMonth);
-
-      if (data && data.calendars) {
-        // 既存データをScheduleCalendarインスタンスに復元
-        this.calendars.clear();
-        for (const [userId, calendarData] of Object.entries(data.calendars)) {
-          try {
-            let calendar;
-            if (typeof window.ScheduleCalendar.fromJSON === 'function') {
-              calendar = window.ScheduleCalendar.fromJSON(calendarData);
-            } else {
-              // fromJSONメソッドがない場合は直接コンストラクタを使用
-              calendar = new window.ScheduleCalendar(userId, yearMonth);
-              // データを復元（簡易版）
-              if (calendarData.cells) {
-                Object.entries(calendarData.cells).forEach(([dateKey, cellsData]) => {
-                  Object.entries(cellsData).forEach(([cellType, cellData]) => {
-                    const cell = new window.ScheduleCell({
-                      userId: userId,
-                      date: window.DateUtils.parseDate(dateKey),
-                      cellType: cellType,
-                      inputValue: cellData.inputValue || '',
-                      actualFlags: cellData.actualFlags || {}
-                    });
-                    calendar.setCell(cell);
-                  });
-                });
-              }
-            }
-            this.calendars.set(userId, calendar);
-          } catch (error) {
-            window.Logger?.warn(`Failed to restore calendar for user ${userId}:`, error);
-          }
+    /**
+     * コントローラーを初期化
+     * @returns {Promise<boolean>}
+     */
+    async initialize() {
+        try {
+            this.logger.info('Initializing ScheduleController');
+            
+            // 利用者マスタを読み込み
+            await this.loadUsers();
+            
+            // 現在月のスケジュールを読み込み
+            await this.loadSchedule(this.currentYearMonth);
+            
+            this.logger.info('ScheduleController initialized successfully');
+            return true;
+            
+        } catch (error) {
+            this.logger.error('Failed to initialize ScheduleController:', error);
+            return false;
         }
-      } else {
-        // 新規作成
-        this.calendars.clear();
-        this.users.forEach(user => {
-          const calendar = new window.ScheduleCalendar(user.id, yearMonth);
-          this.calendars.set(user.id, calendar);
-        });
-      }
-
-      window.Logger?.info(`Loaded schedule: ${yearMonth}, calendars: ${this.calendars.size}`);
-      this.emit('scheduleLoaded', { yearMonth });
-    } catch (error) {
-      window.Logger?.error('Failed to load schedule:', error);
-      this.calendars.clear();
-    }
-  }
-
-  /**
-   * 予定を保存
-   * @returns {boolean} 成功かどうか
-   */
-  saveSchedule() {
-    try {
-      if (!this.currentYearMonth) {
-        window.Logger?.warn('No current yearMonth set');
-        return false;
-      }
-
-      const calendarsData = {};
-      this.calendars.forEach((calendar, userId) => {
-        calendarsData[userId] = calendar.toJSON();
-      });
-
-      const success = this.storageService.saveSchedule(this.currentYearMonth, calendarsData);
-
-      if (success) {
-        this.emit('scheduleUpdated', { yearMonth: this.currentYearMonth });
-        window.Logger?.debug('Schedule saved:', this.currentYearMonth);
-      }
-
-      return success;
-    } catch (error) {
-      window.Logger?.error('Failed to save schedule:', error);
-      return false;
-    }
-  }
-
-  /**
-   * セルを更新
-   * @param {string} userId - 利用者ID
-   * @param {Date} date - 日付
-   * @param {string} cellType - セルタイプ（'dayStay' | 'visit'）
-   * @param {string} value - 値
-   * @returns {boolean} 成功かどうか
-   */
-  updateCell(userId, date, cellType, value) {
-    try {
-      const calendar = this.calendars.get(userId);
-      if (!calendar) {
-        window.Logger?.error('Calendar not found for user:', userId);
-        return false;
-      }
-
-      // セル取得または生成
-      let cell = calendar.getCell(date, cellType);
-      if (!cell) {
-        cell = new window.ScheduleCell({
-          userId: userId,
-          date: new Date(date),
-          cellType: cellType,
-          inputValue: value
-        });
-      } else {
-        cell.inputValue = value;
-      }
-
-      // セット
-      calendar.setCell(cell);
-
-      // 通泊セルの場合、宿泊期間とフラグを再計算
-      if (cellType === 'dayStay') {
-        calendar.calculateStayPeriods();
-        calendar.calculateAllFlags();
-      }
-
-      // イベント発火
-      this.emit('cellUpdated', { userId, date, cellType, value });
-
-      // 自動保存
-      this.saveSchedule();
-
-      window.Logger?.debug('Cell updated:', userId, window.DateUtils.formatDate(date), cellType, value);
-      return true;
-    } catch (error) {
-      window.Logger?.error('Failed to update cell:', error);
-      return false;
-    }
-  }
-
-  /**
-   * セルを取得
-   * @param {string} userId - 利用者ID
-   * @param {Date} date - 日付
-   * @param {string} cellType - セルタイプ
-   * @returns {ScheduleCell|null} セルまたはnull
-   */
-  getCell(userId, date, cellType) {
-    try {
-      const calendar = this.calendars.get(userId);
-      if (!calendar) {
-        return null;
-      }
-
-      let cell = calendar.getCell(date, cellType);
-      if (!cell) {
-        // セルが存在しない場合は空のセルを作成
-        cell = new window.ScheduleCell({
-          userId: userId,
-          date: new Date(date),
-          cellType: cellType,
-          inputValue: ''
-        });
-      }
-
-      return cell;
-    } catch (error) {
-      window.Logger?.error('Failed to get cell:', error);
-      return null;
-    }
-  }
-
-  /**
-   * 指定利用者のカレンダーを取得
-   * @param {string} userId - 利用者ID
-   * @returns {ScheduleCalendar|null} カレンダーまたはnull
-   */
-  getCalendar(userId) {
-    return this.calendars.get(userId) || null;
-  }
-
-  /**
-   * 全カレンダーの配列を返す
-   * @returns {ScheduleCalendar[]} カレンダー配列
-   */
-  getAllCalendars() {
-    return Array.from(this.calendars.values());
-  }
-
-  /**
-   * 月を切り替え
-   * @param {string} yearMonth - 年月（"YYYY-MM"形式）
-   */
-  switchMonth(yearMonth) {
-    try {
-      // 現在の予定を保存
-      if (this.currentYearMonth) {
-        this.saveSchedule();
-      }
-
-      // 新しい月を読み込み
-      this.loadSchedule(yearMonth);
-
-      this.emit('monthChanged', { yearMonth });
-      window.Logger?.info('Month switched to:', yearMonth);
-    } catch (error) {
-      window.Logger?.error('Failed to switch month:', error);
-    }
-  }
-
-  /**
-   * 現在の年月を取得
-   * @returns {string|null} 現在の年月
-   */
-  getCurrentYearMonth() {
-    return this.currentYearMonth;
-  }
-
-  /**
-   * 現在の月の全日付を取得
-   * @returns {Date[]} 日付配列
-   */
-  getAllDates() {
-    if (!this.currentYearMonth) {
-      return [];
     }
 
-    try {
-      return window.DateUtils.getMonthDates(this.currentYearMonth);
-    } catch (error) {
-      window.Logger?.error('Failed to get all dates:', error);
-      return [];
-    }
-  }
+    // ==================== 利用者管理 ====================
 
-  /**
-   * 利用者ごとの宿泊期間を取得
-   * @param {string} userId - 利用者ID
-   * @returns {StayPeriod[]} 宿泊期間配列
-   */
-  getStayPeriods(userId) {
-    try {
-      const calendar = this.calendars.get(userId);
-      if (!calendar) {
-        return [];
-      }
-
-      return calendar.stayPeriods || [];
-    } catch (error) {
-      window.Logger?.error('Failed to get stay periods:', error);
-      return [];
-    }
-  }
-
-  /**
-   * 指定日の全利用者のセル情報を取得
-   * @param {Date} date - 日付
-   * @returns {Object} 利用者IDをキーとしたセル情報
-   */
-  getDayCells(date) {
-    const result = {};
-
-    try {
-      this.calendars.forEach((calendar, userId) => {
-        const dayStayCell = calendar.getCell(date, 'dayStay');
-        const visitCell = calendar.getCell(date, 'visit');
-
-        result[userId] = {
-          dayStay: dayStayCell || null,
-          visit: visitCell || null
-        };
-      });
-    } catch (error) {
-      window.Logger?.error('Failed to get day cells:', error);
+    /**
+     * 利用者マスタを読み込み
+     * @returns {Promise<boolean>}
+     */
+    async loadUsers() {
+        try {
+            this.users = this.storageService.loadUsers();
+            
+            if (this.users.length === 0) {
+                this.logger.info('No users found, showing empty message');
+                this.eventEmitter.emit('users:empty');
+            } else {
+                this.logger.info(`Loaded ${this.users.length} users`);
+                this.eventEmitter.emit('users:loaded', this.users);
+            }
+            
+            return true;
+            
+        } catch (error) {
+            this.logger.error('Failed to load users:', error);
+            this.eventEmitter.emit('users:error', error);
+            return false;
+        }
     }
 
-    return result;
-  }
-
-  /**
-   * バックアップデータを生成
-   * @returns {Object} バックアップデータ
-   */
-  createBackup() {
-    try {
-      return {
-        timestamp: new Date().toISOString(),
-        yearMonth: this.currentYearMonth,
-        users: this.users.map(user => user.toJSON()),
-        calendars: Object.fromEntries(
-          Array.from(this.calendars.entries()).map(([userId, calendar]) => [
-            userId,
-            calendar.toJSON()
-          ])
-        )
-      };
-    } catch (error) {
-      window.Logger?.error('Failed to create backup:', error);
-      return null;
-    }
-  }
-
-  /**
-   * バックアップから復元
-   * @param {Object} backup - バックアップデータ
-   * @returns {boolean} 成功かどうか
-   */
-  restoreFromBackup(backup) {
-    try {
-      if (!backup || !backup.users || !backup.calendars) {
-        throw new Error('Invalid backup data');
-      }
-
-      // 利用者復元
-      this.users = backup.users.map(userData => new window.User(userData));
-
-      // カレンダー復元
-      this.calendars.clear();
-      for (const [userId, calendarData] of Object.entries(backup.calendars)) {
-        const calendar = new window.ScheduleCalendar(userId, backup.yearMonth);
-        // TODO: カレンダーデータの復元ロジックを実装
-        this.calendars.set(userId, calendar);
-      }
-
-      this.currentYearMonth = backup.yearMonth;
-
-      // 保存
-      this.saveUsers();
-      this.saveSchedule();
-
-      window.Logger?.info('Restored from backup:', backup.timestamp);
-      return true;
-    } catch (error) {
-      window.Logger?.error('Failed to restore from backup:', error);
-      return false;
-    }
-  }
-
-  /**
-   * デバッグ情報を出力
-   */
-  debug() {
-    window.Logger?.group('ScheduleController Debug Info');
-    window.Logger?.info('Current YearMonth:', this.currentYearMonth);
-    window.Logger?.info('Users:', this.users.length);
-    window.Logger?.info('Calendars:', this.calendars.size);
-
-    if (this.users.length > 0) {
-      window.Logger?.info('Users List:', this.users.map(u => ({ id: u.id, name: u.name })));
+    /**
+     * 利用者マスタを保存
+     * @returns {Promise<boolean>}
+     */
+    async saveUsers() {
+        try {
+            const success = this.storageService.saveUsers(this.users);
+            
+            if (success) {
+                this.logger.info(`Saved ${this.users.length} users`);
+                this.eventEmitter.emit('users:saved', this.users);
+            }
+            
+            return success;
+            
+        } catch (error) {
+            this.logger.error('Failed to save users:', error);
+            this.eventEmitter.emit('users:error', error);
+            return false;
+        }
     }
 
-    if (this.calendars.size > 0) {
-      const calendarInfo = {};
-      this.calendars.forEach((calendar, userId) => {
-        const user = this.getUser(userId);
-        calendarInfo[userId] = {
-          name: user ? user.name : 'Unknown',
-          cellCount: Object.keys(calendar.cells || {}).length,
-          stayPeriods: (calendar.stayPeriods || []).length
-        };
-      });
-      window.Logger?.table(calendarInfo);
+    /**
+     * 利用者を追加
+     * @param {User} user - 追加する利用者
+     * @returns {Promise<boolean>}
+     */
+    async addUser(user) {
+        try {
+            // バリデーション
+            const validation = user.validate();
+            if (!validation.valid) {
+                this.logger.warn('User validation failed:', validation.errors);
+                this.eventEmitter.emit('user:validation-error', validation.errors);
+                return false;
+            }
+
+            // sortIdを設定
+            if (user.sortId === 0) {
+                const maxSortId = this.users.reduce((max, u) => Math.max(max, u.sortId), -1);
+                user.sortId = maxSortId + 1;
+            }
+
+            this.users.push(user);
+            
+            // カレンダーを作成
+            this.calendars.set(user.id, new ScheduleCalendar(user.id, this.currentYearMonth));
+            
+            // 保存
+            await this.saveUsers();
+            await this.saveSchedule();
+            
+            this.logger.info(`User added: ${user.id} (${user.name})`);
+            this.eventEmitter.emit('user:added', user);
+            
+            return true;
+            
+        } catch (error) {
+            this.logger.error('Failed to add user:', error);
+            this.eventEmitter.emit('user:error', error);
+            return false;
+        }
     }
 
-    window.Logger?.groupEnd();
-  }
+    /**
+     * 利用者を削除（論理削除）
+     * @param {string} userId - 利用者ID
+     * @returns {Promise<boolean>}
+     */
+    async deleteUser(userId) {
+        try {
+            const user = this.getUserById(userId);
+            if (!user) {
+                this.logger.warn(`User not found: ${userId}`);
+                return false;
+            }
+
+            user.delete();
+            await this.saveUsers();
+            
+            this.logger.info(`User deleted: ${userId} (${user.name})`);
+            this.eventEmitter.emit('user:deleted', user);
+            
+            return true;
+            
+        } catch (error) {
+            this.logger.error('Failed to delete user:', error);
+            this.eventEmitter.emit('user:error', error);
+            return false;
+        }
+    }
+
+    /**
+     * 利用者を復元
+     * @param {string} userId - 利用者ID
+     * @returns {Promise<boolean>}
+     */
+    async restoreUser(userId) {
+        try {
+            const user = this.getUserById(userId);
+            if (!user) {
+                this.logger.warn(`User not found: ${userId}`);
+                return false;
+            }
+
+            user.restore();
+            await this.saveUsers();
+            
+            this.logger.info(`User restored: ${userId} (${user.name})`);
+            this.eventEmitter.emit('user:restored', user);
+            
+            return true;
+            
+        } catch (error) {
+            this.logger.error('Failed to restore user:', error);
+            this.eventEmitter.emit('user:error', error);
+            return false;
+        }
+    }
+
+    /**
+     * 利用者を取得
+     * @param {string} userId - 利用者ID
+     * @returns {User|null}
+     */
+    getUserById(userId) {
+        return User.findById(this.users, userId);
+    }
+
+    /**
+     * 有効な利用者のみを取得
+     * @returns {Array<User>}
+     */
+    getActiveUsers() {
+        return User.filterActive(this.users);
+    }
+
+    /**
+     * 利用者をソート順で取得
+     * @returns {Array<User>}
+     */
+    getSortedUsers() {
+        return User.sortBySortId(this.users);
+    }
+
+    // ==================== スケジュール管理 ====================
+
+    /**
+     * 月間スケジュールを読み込み
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {Promise<boolean>}
+     */
+    async loadSchedule(yearMonth) {
+        try {
+            this.currentYearMonth = yearMonth;
+            this.calendars = this.storageService.loadSchedule(yearMonth, this.users);
+            
+            this.logger.info(`Loaded schedule for ${yearMonth}, ${this.calendars.size} calendars`);
+            this.eventEmitter.emit('schedule:loaded', { yearMonth, calendars: this.calendars });
+            
+            return true;
+            
+        } catch (error) {
+            this.logger.error(`Failed to load schedule for ${yearMonth}:`, error);
+            this.eventEmitter.emit('schedule:error', error);
+            return false;
+        }
+    }
+
+    /**
+     * 月間スケジュールを保存
+     * @returns {Promise<boolean>}
+     */
+    async saveSchedule() {
+        try {
+            const success = this.storageService.saveSchedule(this.currentYearMonth, this.calendars);
+            
+            if (success) {
+                this.logger.info(`Saved schedule for ${this.currentYearMonth}`);
+                this.eventEmitter.emit('schedule:saved', this.currentYearMonth);
+            }
+            
+            return success;
+            
+        } catch (error) {
+            this.logger.error('Failed to save schedule:', error);
+            this.eventEmitter.emit('schedule:error', error);
+            return false;
+        }
+    }
+
+    /**
+     * 月を変更
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {Promise<boolean>}
+     */
+    async changeMonth(yearMonth) {
+        try {
+            // 現在のスケジュールを保存
+            await this.saveSchedule();
+            
+            // 新しい月のスケジュールを読み込み
+            await this.loadSchedule(yearMonth);
+            
+            this.logger.info(`Month changed to ${yearMonth}`);
+            this.eventEmitter.emit('month:changed', yearMonth);
+            
+            return true;
+            
+        } catch (error) {
+            this.logger.error('Failed to change month:', error);
+            this.eventEmitter.emit('month:error', error);
+            return false;
+        }
+    }
+
+    /**
+     * 前月へ移動
+     * @returns {Promise<boolean>}
+     */
+    async moveToPreviousMonth() {
+        const previousMonth = DateUtils.getPreviousMonth(this.currentYearMonth);
+        return await this.changeMonth(previousMonth);
+    }
+
+    /**
+     * 翌月へ移動
+     * @returns {Promise<boolean>}
+     */
+    async moveToNextMonth() {
+        const nextMonth = DateUtils.getNextMonth(this.currentYearMonth);
+        return await this.changeMonth(nextMonth);
+    }
+
+    /**
+     * 現在の年月を取得
+     * @returns {string}
+     */
+    getCurrentYearMonth() {
+        return this.currentYearMonth;
+    }
+
+    // ==================== セル操作 ====================
+
+    /**
+     * セル値を更新
+     * @param {string} userId - 利用者ID
+     * @param {string} date - "YYYY-MM-DD"形式
+     * @param {string} cellType - 'dayStay' | 'visit'
+     * @param {string} value - セル値
+     * @returns {Promise<boolean>}
+     */
+    async updateCell(userId, date, cellType, value) {
+        try {
+            const calendar = this.calendars.get(userId);
+            if (!calendar) {
+                this.logger.warn(`Calendar not found for user: ${userId}`);
+                return false;
+            }
+
+            const result = calendar.setCell(date, cellType, value);
+            
+            if (!result.valid) {
+                this.logger.warn(`Cell validation failed: ${result.message}`);
+                this.eventEmitter.emit('cell:validation-error', { userId, date, cellType, message: result.message });
+                return false;
+            }
+
+            // 自動保存
+            if (AppConfig.STORAGE.AUTO_SAVE) {
+                await this.saveSchedule();
+            }
+
+            this.logger.debug(`Cell updated: ${userId}, ${date}, ${cellType} = ${value}`);
+            this.eventEmitter.emit('cell:updated', { userId, date, cellType, value });
+            
+            return true;
+            
+        } catch (error) {
+            this.logger.error('Failed to update cell:', error);
+            this.eventEmitter.emit('cell:error', error);
+            return false;
+        }
+    }
+
+    /**
+     * セルを取得
+     * @param {string} userId - 利用者ID
+     * @param {string} date - "YYYY-MM-DD"形式
+     * @param {string} cellType - 'dayStay' | 'visit'
+     * @returns {ScheduleCell|null}
+     */
+    getCell(userId, date, cellType) {
+        const calendar = this.calendars.get(userId);
+        if (!calendar) {
+            return null;
+        }
+        return calendar.getCell(date, cellType);
+    }
+
+    /**
+     * セルを削除（復元可能）
+     * @param {string} userId - 利用者ID
+     * @param {string} date - "YYYY-MM-DD"形式
+     * @param {string} cellType - 'dayStay' | 'visit'
+     * @returns {Promise<boolean>}
+     */
+    async deleteCell(userId, date, cellType) {
+        try {
+            const cell = this.getCell(userId, date, cellType);
+            if (!cell) {
+                return false;
+            }
+
+            cell.delete();
+
+            if (AppConfig.STORAGE.AUTO_SAVE) {
+                await this.saveSchedule();
+            }
+
+            this.logger.debug(`Cell deleted: ${userId}, ${date}, ${cellType}`);
+            this.eventEmitter.emit('cell:deleted', { userId, date, cellType });
+            
+            return true;
+            
+        } catch (error) {
+            this.logger.error('Failed to delete cell:', error);
+            return false;
+        }
+    }
+
+    /**
+     * セルを復元
+     * @param {string} userId - 利用者ID
+     * @param {string} date - "YYYY-MM-DD"形式
+     * @param {string} cellType - 'dayStay' | 'visit'
+     * @returns {Promise<boolean>}
+     */
+    async restoreCell(userId, date, cellType) {
+        try {
+            const cell = this.getCell(userId, date, cellType);
+            if (!cell) {
+                return false;
+            }
+
+            const success = cell.restore();
+            if (!success) {
+                this.logger.warn('Cell cannot be restored');
+                return false;
+            }
+
+            if (AppConfig.STORAGE.AUTO_SAVE) {
+                await this.saveSchedule();
+            }
+
+            this.logger.debug(`Cell restored: ${userId}, ${date}, ${cellType}`);
+            this.eventEmitter.emit('cell:restored', { userId, date, cellType });
+            
+            return true;
+            
+        } catch (error) {
+            this.logger.error('Failed to restore cell:', error);
+            return false;
+        }
+    }
+
+    // ==================== カレンダー取得 ====================
+
+    /**
+     * 指定利用者のカレンダーを取得
+     * @param {string} userId - 利用者ID
+     * @returns {ScheduleCalendar|null}
+     */
+    getCalendar(userId) {
+        return this.calendars.get(userId) || null;
+    }
+
+    /**
+     * 全カレンダーを取得
+     * @returns {Map<string, ScheduleCalendar>}
+     */
+    getAllCalendars() {
+        return this.calendars;
+    }
+
+    /**
+     * 宿泊期間を取得
+     * @param {string} userId - 利用者ID
+     * @returns {Array<StayPeriod>}
+     */
+    getStayPeriods(userId) {
+        const calendar = this.getCalendar(userId);
+        return calendar ? calendar.stayPeriods : [];
+    }
+
+    // ==================== スケジュールクリア ====================
+
+    /**
+     * 指定利用者のスケジュールをクリア
+     * @param {string} userId - 利用者ID
+     * @returns {Promise<boolean>}
+     */
+    async clearUserSchedule(userId) {
+        try {
+            const calendar = this.calendars.get(userId);
+            if (!calendar) {
+                return false;
+            }
+
+            calendar.clear();
+            await this.saveSchedule();
+
+            this.logger.info(`User schedule cleared: ${userId}`);
+            this.eventEmitter.emit('schedule:cleared', userId);
+            
+            return true;
+            
+        } catch (error) {
+            this.logger.error('Failed to clear user schedule:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 全利用者のスケジュールをクリア
+     * @returns {Promise<boolean>}
+     */
+    async clearAllSchedules() {
+        try {
+            this.calendars.forEach(calendar => {
+                calendar.clear();
+            });
+
+            await this.saveSchedule();
+
+            this.logger.info('All schedules cleared');
+            this.eventEmitter.emit('schedules:cleared');
+            
+            return true;
+            
+        } catch (error) {
+            this.logger.error('Failed to clear all schedules:', error);
+            return false;
+        }
+    }
+
+    // ==================== イベント管理 ====================
+
+    /**
+     * イベントリスナーを登録
+     * @param {string} eventName - イベント名
+     * @param {Function} callback - コールバック関数
+     * @returns {Function} 登録解除関数
+     */
+    on(eventName, callback) {
+        return this.eventEmitter.on(eventName, callback);
+    }
+
+    /**
+     * イベントリスナーを解除
+     * @param {string} eventName - イベント名
+     * @param {Function} callback - コールバック関数
+     */
+    off(eventName, callback) {
+        this.eventEmitter.off(eventName, callback);
+    }
+
+    // ==================== CSV インポート ====================
+
+    /**
+     * CSVファイルから利用者とスケジュールをインポート
+     * @param {FileList|Array<File>} files - CSVファイル（介護.csv, 予防.csv等）
+     * @returns {Promise<boolean>}
+     */
+    async importCSV(files) {
+        try {
+            this.logger.info('CSV import started');
+            this.eventEmitter.emit('import:start', { fileCount: files.length });
+            
+            // 1. CSVパース
+            const csvService = new CSVService();
+            const { users, weeklyPatterns } = await csvService.parseCSVFiles(files);
+            
+            this.logger.info(`Parsed ${users.length} users from CSV`);
+            
+            // 2. 既存ユーザーチェック
+            const hasExistingUsers = this.users.length > 0;
+            
+            if (hasExistingUsers) {
+                // TODO: 利用者確認画面を表示（Phase 2で実装）
+                this.logger.warn('Existing users found, will be overwritten');
+            }
+            
+            // 3. 利用者マスタ更新
+            this.users = users;
+            await this.storageService.saveUsers(users);
+            this.logger.info('User master updated');
+            
+            // 4. 週間→月間展開
+            const calendars = csvService.expandWeeklyToMonthly(
+                weeklyPatterns,
+                this.currentYearMonth,
+                users
+            );
+            
+            this.logger.info('Weekly patterns expanded to monthly');
+            
+            // 5. 既存スケジュールチェック
+            const hasExistingSchedule = this.storageService.hasSchedule(this.currentYearMonth);
+            
+            if (hasExistingSchedule) {
+                // TODO: 上書き確認ダイアログ（Phase 2で実装）
+                this.logger.warn('Existing schedule found, will be overwritten with notes preserved');
+                
+                // 6. 備考を保持したまま上書き
+                const mergedCalendars = csvService.mergeWithExistingNotes(
+                    calendars,
+                    this.currentYearMonth,
+                    this.storageService
+                );
+                
+                // マージ済みカレンダーを設定
+                this.calendars = mergedCalendars;
+            } else {
+                // 既存スケジュールがない場合はそのまま設定
+                this.calendars = calendars;
+            }
+            
+            // 7. 保存
+            await this.storageService.saveSchedule(this.currentYearMonth, this.calendars);
+            this.logger.info('Schedule saved');
+            
+            // 8. イベント発火
+            this.eventEmitter.emit('users:loaded', { users: this.users });
+            this.eventEmitter.emit('schedule:loaded', { yearMonth: this.currentYearMonth });
+            this.eventEmitter.emit('import:complete', { 
+                userCount: users.length,
+                yearMonth: this.currentYearMonth
+            });
+            
+            this.logger.info('CSV import completed successfully');
+            return true;
+            
+        } catch (error) {
+            this.logger.error('CSV import failed:', error);
+            this.eventEmitter.emit('import:error', { error });
+            throw error;
+        }
+    }
 }
 
-// グローバルに登録
+// グローバル変数として公開
 window.ScheduleController = ScheduleController;

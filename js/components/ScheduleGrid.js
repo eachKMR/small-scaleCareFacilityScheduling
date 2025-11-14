@@ -1,447 +1,487 @@
 /**
- * スケジュールグリッド表示コンポーネント
- * 利用者×日付のテーブルを生成し、セルの色分けや備考アイコンを表示
+ * ScheduleGridクラス（予定グリッド）
+ * 58行×33列のグリッド表示を担当
  */
 class ScheduleGrid {
-    constructor(app, containerId) {
-        // 依存関係チェック
-        if (typeof window.App === 'undefined') {
-            throw new Error('App is required');
-        }
-        if (typeof window.Logger === 'undefined') {
-            throw new Error('Logger is required');
-        }
-        if (typeof window.DateUtils === 'undefined') {
-            throw new Error('DateUtils is required');
-        }
-        
-        this.app = app;
-        this.container = document.getElementById(containerId);
-        
-        if (!this.container) {
-            throw new Error(`Container not found: ${containerId}`);
-        }
-        
-        this.table = null;
-        
-        Logger?.info('ScheduleGrid initialized');
-    }
-    
     /**
-     * 初期化処理
+     * コンストラクタ
+     * @param {HTMLElement} container - グリッドを表示するコンテナ要素
+     * @param {ScheduleController} scheduleController - スケジュールコントローラー
+     * @param {CapacityCheckController} capacityCheckController - 定員チェックコントローラー
      */
-    init() {
-        this.render();
+    constructor(container, scheduleController, capacityCheckController) {
+        this.container = container;
+        this.scheduleController = scheduleController;
+        this.capacityCheckController = capacityCheckController;
+        this.logger = new Logger('ScheduleGrid');
+        
+        this.currentYearMonth = null;
+        this.users = [];
+        this.daysInMonth = [];
+        
+        // イベントリスナー
+        this.setupEventListeners();
     }
-    
+
+    // ==================== イベントリスナー ====================
+
     /**
-     * テーブル全体を再構築
+     * イベントリスナーを設定
+     */
+    setupEventListeners() {
+        // スケジュール読み込み時
+        this.scheduleController.on('schedule:loaded', () => {
+            this.logger.debug('Schedule loaded, rendering grid');
+            this.render();
+        });
+
+        // 利用者読み込み時
+        this.scheduleController.on('users:loaded', () => {
+            this.logger.debug('Users loaded, rendering grid');
+            this.render();
+        });
+
+        // セル更新時
+        this.scheduleController.on('cell:updated', (data) => {
+            this.logger.debug('Cell updated:', data);
+            this.updateCell(data.userId, data.date, data.cellType);
+        });
+
+        // 月変更時
+        this.scheduleController.on('month:changed', (data) => {
+            this.logger.debug('Month changed:', data);
+            this.currentYearMonth = data.yearMonth;
+            this.render();
+        });
+    }
+
+    // ==================== レンダリング ====================
+
+    /**
+     * グリッド全体を描画
      */
     render() {
-        try {
-            Logger?.debug('ScheduleGrid rendering...');
-            
-            // コンテナをクリア
-            this.container.innerHTML = '';
-            
-            // スケジュールコントローラーが利用可能かチェック
-            const scheduleController = this.app.getController('schedule');
-            if (!scheduleController) {
-                this.container.innerHTML = '<p>スケジュールデータを読み込み中...</p>';
-                return;
-            }
-            
-            // 新しいテーブル作成
-            this.table = document.createElement('table');
-            this.table.className = 'schedule-grid';
-            
-            // ヘッダーとボディ生成
-            this.renderHeader();
-            this.renderBody();
-            
-            // コンテナに追加
-            this.container.appendChild(this.table);
-            
-            Logger?.debug('ScheduleGrid rendered');
-            
-        } catch (error) {
-            Logger?.error('ScheduleGrid rendering failed:', error);
-            this.container.innerHTML = `<p>グリッドの表示に失敗しました: ${error.message}</p>`;
-        }
+        this.logger.info('Rendering schedule grid');
+        
+        // 現在のデータを取得
+        this.currentYearMonth = this.scheduleController.getCurrentYearMonth();
+        this.users = this.scheduleController.getSortedUsers();
+        this.daysInMonth = this.getDaysInMonth(this.currentYearMonth);
+        
+        // コンテナをクリア
+        this.container.innerHTML = '';
+        
+        // グリッドを生成
+        const gridElement = this.createGridElement();
+        this.container.appendChild(gridElement);
+        
+        this.logger.info(`Grid rendered: ${this.users.length} users, ${this.daysInMonth.length} days`);
     }
-    
+
     /**
-     * ヘッダー行を生成
+     * グリッド要素を作成
+     * @returns {HTMLElement}
      */
-    renderHeader() {
+    createGridElement() {
+        const table = document.createElement('table');
+        table.className = 'schedule-grid';
+        
+        // ヘッダー行（日付）
+        const thead = this.createHeaderRow();
+        table.appendChild(thead);
+        
+        // ボディ（利用者行）
+        const tbody = this.createBodyRows();
+        table.appendChild(tbody);
+        
+        return table;
+    }
+
+    /**
+     * ヘッダー行を作成
+     * @returns {HTMLElement}
+     */
+    createHeaderRow() {
         const thead = document.createElement('thead');
         const tr = document.createElement('tr');
+        tr.className = 'header-row';
         
-        // 利用者名列
+        // 利用者名列（固定）
         const thName = document.createElement('th');
-        thName.textContent = '利用者';
-        thName.className = 'header-cell header-name';
+        thName.className = 'header-cell header-name-cell';
+        thName.textContent = '利用者名';
         tr.appendChild(thName);
         
-        // 日付列
-        const dates = this.getDatesForCurrentMonth();
-        dates.forEach(date => {
+        // 前月特別セル
+        const thPrev = document.createElement('th');
+        thPrev.className = 'header-cell header-special-cell';
+        thPrev.textContent = '前月';
+        tr.appendChild(thPrev);
+        
+        // 1日～31日
+        this.daysInMonth.forEach(date => {
             const th = document.createElement('th');
-            th.textContent = date.getDate();
-            th.className = 'header-cell header-date';
+            th.className = 'header-cell header-date-cell';
             
-            // 土日の色分け
-            const dayOfWeek = date.getDay();
-            if (dayOfWeek === 0) { // 日曜日
-                th.classList.add('sunday');
-            } else if (dayOfWeek === 6) { // 土曜日
-                th.classList.add('saturday');
+            const day = new Date(date).getDate();
+            const dayOfWeek = new Date(date).getDay();
+            
+            // 曜日のクラスを追加
+            if (dayOfWeek === 0) {
+                th.classList.add('header-sunday');
+            } else if (dayOfWeek === 6) {
+                th.classList.add('header-saturday');
             }
             
-            // 定員オーバーチェック
-            try {
-                const capacityController = this.app.getController('capacity');
-                if (capacityController) {
-                    const dateStr = DateUtils.formatDate(date);
-                    const capacity = capacityController.checkDate(dateStr);
-                    if (capacity && capacity.isOverCapacity && capacity.isOverCapacity()) {
-                        th.classList.add('over-capacity');
-                    }
-                }
-            } catch (error) {
-                Logger?.warn('Capacity check failed for date:', date, error);
-            }
+            th.textContent = `${day}`;
+            th.title = DateUtils.formatDate(date, 'YYYY/MM/DD (ddd)');
             
             tr.appendChild(th);
         });
         
+        // 翌月特別セル
+        const thNext = document.createElement('th');
+        thNext.className = 'header-cell header-special-cell';
+        thNext.textContent = '翌月';
+        tr.appendChild(thNext);
+        
         thead.appendChild(tr);
-        this.table.appendChild(thead);
+        return thead;
     }
-    
+
     /**
-     * ボディ行を生成
+     * ボディ行を作成
+     * @returns {HTMLElement}
      */
-    renderBody() {
+    createBodyRows() {
         const tbody = document.createElement('tbody');
         
-        const scheduleController = this.app.getController('schedule');
-        const users = this.getUsers();
+        if (this.users.length === 0) {
+            // 利用者がいない場合
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 33; // 列数
+            td.className = 'empty-message';
+            td.textContent = '利用者データがありません。「算定一覧を取り込む」からCSVファイルを読み込んでください。';
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+            return tbody;
+        }
         
-        users.forEach(user => {
-            const [dayStayRow, visitRow] = this.renderUserRows(user);
+        // 各利用者の行を作成（通泊行 + 訪問行）
+        this.users.forEach(user => {
+            // 通泊行
+            const dayStayRow = this.createUserRow(user, 'dayStay');
             tbody.appendChild(dayStayRow);
+            
+            // 訪問行
+            const visitRow = this.createUserRow(user, 'visit');
             tbody.appendChild(visitRow);
         });
         
-        this.table.appendChild(tbody);
+        return tbody;
     }
-    
+
     /**
-     * 1人の利用者につき2行を生成
+     * 利用者の行を作成
      * @param {User} user - 利用者
-     * @returns {HTMLTableRowElement[]} [通泊行, 訪問行]
+     * @param {string} rowType - 'dayStay' | 'visit'
+     * @returns {HTMLElement}
      */
-    renderUserRows(user) {
-        const dayStayRow = this.createDayStayRow(user);
-        const visitRow = this.createVisitRow(user);
-        return [dayStayRow, visitRow];
-    }
-    
-    /**
-     * 通泊行を生成
-     * @param {User} user - 利用者
-     * @returns {HTMLTableRowElement}
-     */
-    createDayStayRow(user) {
+    createUserRow(user, rowType) {
         const tr = document.createElement('tr');
-        tr.className = 'user-row day-stay-row';
+        tr.className = rowType === 'dayStay' ? 'row-day-stay' : 'row-visit';
         tr.dataset.userId = user.id;
-        tr.dataset.rowType = 'dayStay';
+        tr.dataset.rowType = rowType;
         
-        // 利用者名セル
+        // 利用者名セル（通泊行のみ表示、訪問行は空）
         const tdName = document.createElement('td');
-        tdName.textContent = user.name;
         tdName.className = 'user-name-cell';
-        tdName.rowSpan = 2; // 2行分
-        tr.appendChild(tdName);
-        
-        // 日付セル
-        const dates = this.getDatesForCurrentMonth();
-        dates.forEach(date => {
-            const td = this.createCell(user.id, date, 'dayStay');
-            tr.appendChild(td);
-        });
-        
-        return tr;
-    }
-    
-    /**
-     * 訪問行を生成
-     * @param {User} user - 利用者
-     * @returns {HTMLTableRowElement}
-     */
-    createVisitRow(user) {
-        const tr = document.createElement('tr');
-        tr.className = 'user-row visit-row';
-        tr.dataset.userId = user.id;
-        tr.dataset.rowType = 'visit';
-        
-        // 日付セル（利用者名セルはrowSpanで共有）
-        const dates = this.getDatesForCurrentMonth();
-        dates.forEach(date => {
-            const td = this.createCell(user.id, date, 'visit');
-            tr.appendChild(td);
-        });
-        
-        return tr;
-    }
-    
-    /**
-     * セルを生成
-     * @param {string} userId - 利用者ID
-     * @param {Date} date - 日付
-     * @param {string} cellType - 'dayStay' | 'visit'
-     * @returns {HTMLTableCellElement}
-     */
-    createCell(userId, date, cellType) {
-        const td = document.createElement('td');
-        td.className = `schedule-cell ${cellType}-cell`;
-        td.dataset.userId = userId;
-        td.dataset.date = DateUtils.formatDate(date);
-        td.dataset.cellType = cellType;
-        
-        try {
-            // セルデータ取得
-            const scheduleController = this.app.getController('schedule');
-            const dateStr = DateUtils.formatDate(date);
-            
-            if (scheduleController && scheduleController.getCell) {
-                const cell = scheduleController.getCell(userId, dateStr, cellType);
-                
-                if (cell) {
-                    // 値を表示
-                    td.textContent = cell.inputValue || '';
-                    
-                    // スタイル適用
-                    this.applyCellStyle(td, cell, cellType);
-                }
-            }
-            
-        } catch (error) {
-            Logger?.warn('Cell data retrieval failed:', userId, DateUtils.formatDate(date), cellType, error);
+        if (rowType === 'dayStay') {
+            tdName.textContent = user.name;
+            tdName.rowSpan = 2;
+        } else {
+            // 訪問行は名前セルを表示しない（rowSpanで結合されている）
+            tr.style.display = 'contents'; // CSSで制御
         }
         
-        // クリックイベント
-        td.addEventListener('click', (e) => {
-            this.handleCellClick(td, userId, date, cellType, e);
+        if (rowType === 'dayStay') {
+            tr.appendChild(tdName);
+        }
+        
+        // 前月特別セル
+        const tdPrev = this.createCellElement(user, 'prevMonth', rowType);
+        tr.appendChild(tdPrev);
+        
+        // 1日～31日のセル
+        this.daysInMonth.forEach(date => {
+            const cellType = rowType === 'dayStay' ? 'am' : 'visit'; // amはdayStayの代表
+            const td = this.createCellElement(user, date, cellType);
+            tr.appendChild(td);
         });
         
-        // ホバー効果
-        td.addEventListener('mouseenter', () => {
-            td.classList.add('hover');
-        });
+        // 翌月特別セル
+        const tdNext = this.createCellElement(user, 'nextMonth', rowType);
+        tr.appendChild(tdNext);
         
-        td.addEventListener('mouseleave', () => {
-            td.classList.remove('hover');
-        });
+        return tr;
+    }
+
+    /**
+     * セル要素を作成
+     * @param {User} user - 利用者
+     * @param {string} date - 日付（"YYYY-MM-DD"）または "prevMonth" | "nextMonth"
+     * @param {string} cellType - セルタイプ
+     * @returns {HTMLElement}
+     */
+    createCellElement(user, date, cellType) {
+        const td = document.createElement('td');
+        td.className = 'schedule-cell';
+        td.dataset.userId = user.id;
+        td.dataset.date = date;
+        td.dataset.cellType = cellType;
+        
+        // 特別セルのスタイル
+        if (date === 'prevMonth' || date === 'nextMonth') {
+            td.classList.add('cell-special');
+        }
+        
+        // セルデータを取得して表示
+        this.updateCellContent(td, user.id, date, cellType);
+        
+        // イベントリスナー
+        td.addEventListener('click', (e) => this.handleCellClick(e, td));
+        td.addEventListener('contextmenu', (e) => this.handleCellRightClick(e, td));
+        td.addEventListener('mouseenter', (e) => this.handleCellHover(e, td));
+        td.addEventListener('mouseleave', (e) => this.handleCellLeave(e, td));
         
         return td;
     }
-    
+
     /**
-     * セルのスタイリング
-     * @param {HTMLTableCellElement} td - セル要素
-     * @param {ScheduleCell} cell - セルデータ
+     * セルの内容を更新
+     * @param {HTMLElement} td - セル要素
+     * @param {string} userId - 利用者ID
+     * @param {string} date - 日付
      * @param {string} cellType - セルタイプ
      */
-    applyCellStyle(td, cell, cellType) {
-        try {
-            // 既存のスタイルクラスをクリア
-            td.classList.remove('stay-active', 'day-active', 'has-note', 'stay-in', 'stay-out');
-            
-            if (cellType === 'dayStay') {
-                // 通泊セルのスタイリング
-                if (cell.actualFlags) {
-                    if (cell.actualFlags.stay) {
-                        td.classList.add('stay-active');
-                    }
-                    if (cell.actualFlags.day) {
-                        td.classList.add('day-active');
-                    }
-                }
-                
-                // 入所・退所の特別スタイル
-                if (cell.inputValue === '入所') {
-                    td.classList.add('stay-in');
-                } else if (cell.inputValue === '退所') {
-                    td.classList.add('stay-out');
-                }
-                
-            } else if (cellType === 'visit') {
-                // 訪問セルのスタイリング
-                if (cell.inputValue && cell.inputValue.trim() !== '') {
-                    td.classList.add('visit-active');
-                }
-            }
-            
-            // 備考アイコン
-            this.updateNoteIcon(td, cell);
-            
-        } catch (error) {
-            Logger?.warn('Cell styling failed:', error);
-        }
-    }
-    
-    /**
-     * 備考アイコンを更新
-     * @param {HTMLTableCellElement} td - セル要素
-     * @param {ScheduleCell} cell - セルデータ
-     */
-    updateNoteIcon(td, cell) {
-        // 既存のアイコンを削除
-        const existingIcon = td.querySelector('.note-icon');
-        if (existingIcon) {
-            existingIcon.remove();
+    updateCellContent(td, userId, date, cellType) {
+        // スケジュールデータを取得
+        const cell = this.scheduleController.getCell(userId, date, cellType);
+        
+        if (!cell || cell.isEmpty()) {
+            td.textContent = '';
+            td.classList.remove('cell-has-value', 'cell-deleted', 'cell-has-note');
+            return;
         }
         
-        // 備考があればアイコンを追加
-        if (cell.hasNote && cell.hasNote()) {
-            const icon = document.createElement('span');
-            icon.className = 'note-icon';
-            icon.textContent = '📝';
-            icon.title = '備考あり';
-            td.appendChild(icon);
-            td.classList.add('has-note');
+        // 削除状態の場合
+        if (cell.deletedValue) {
+            td.textContent = '';
+            td.classList.add('cell-deleted');
+            td.classList.remove('cell-has-value');
+            return;
+        }
+        
+        // 値を表示
+        td.textContent = cell.inputValue;
+        td.classList.add('cell-has-value');
+        td.classList.remove('cell-deleted');
+        
+        // 備考がある場合
+        if (cell.note) {
+            td.classList.add('cell-has-note');
+        }
+        
+        // 宿泊期間の場合
+        if (cell.actualFlags && cell.actualFlags.stay) {
+            td.classList.add('cell-stay');
+        }
+        
+        // 通いの種類に応じてクラスを追加
+        if (cell.actualFlags && cell.actualFlags.day) {
+            const halfDayType = cell.actualFlags.halfDayType;
+            if (halfDayType === 'morning') {
+                td.classList.add('cell-morning');
+            } else if (halfDayType === 'afternoon') {
+                td.classList.add('cell-afternoon');
+            } else if (halfDayType === 'full') {
+                td.classList.add('cell-full-day');
+            }
         }
     }
-    
+
     /**
-     * セルクリック時の処理
-     * @param {HTMLTableCellElement} td - セル要素
+     * 個別セルを更新
      * @param {string} userId - 利用者ID
-     * @param {Date} date - 日付
+     * @param {string} date - 日付
      * @param {string} cellType - セルタイプ
-     * @param {Event} event - クリックイベント
      */
-    handleCellClick(td, userId, date, cellType, event) {
-        try {
-            Logger?.debug('Cell clicked:', userId, DateUtils.formatDate(date), cellType);
-            
-            // CellEditorを起動
-            const cellEditor = this.app.getComponent('cellEditor');
-            if (cellEditor && cellEditor.startEdit) {
-                cellEditor.startEdit(td, userId, date, cellType);
-            }
-            
-        } catch (error) {
-            Logger?.error('Cell click handling failed:', error);
-            this.app.showError('セルの編集に失敗しました: ' + error.message);
+    updateCell(userId, date, cellType) {
+        const selector = `td[data-user-id="${userId}"][data-date="${date}"][data-cell-type="${cellType}"]`;
+        const td = this.container.querySelector(selector);
+        
+        if (td) {
+            this.updateCellContent(td, userId, date, cellType);
         }
     }
-    
+
+    // ==================== イベントハンドラー ====================
+
     /**
-     * 特定のセルを更新
+     * セルクリック
+     * @param {Event} e - イベント
+     * @param {HTMLElement} td - セル要素
+     */
+    handleCellClick(e, td) {
+        const userId = td.dataset.userId;
+        const date = td.dataset.date;
+        const cellType = td.dataset.cellType;
+        
+        this.logger.debug(`Cell clicked: ${userId}, ${date}, ${cellType}`);
+        
+        // 現在の値を取得
+        const cell = this.scheduleController.getCell(userId, date, cellType);
+        
+        // 削除状態の場合は復元
+        if (cell && cell.canRestore()) {
+            this.scheduleController.restoreCell(userId, date, cellType);
+            return;
+        }
+        
+        // 行タイプに応じて処理
+        const row = td.closest('tr');
+        const rowType = row.dataset.rowType;
+        
+        if (rowType === 'dayStay') {
+            // 通泊行: ○ ⇔ 空白のトグル
+            const currentValue = cell ? cell.inputValue : '';
+            const newValue = currentValue === AppConfig.SYMBOLS.FULL_DAY ? '' : AppConfig.SYMBOLS.FULL_DAY;
+            this.scheduleController.updateCell(userId, date, 'am', newValue);
+        } else if (rowType === 'visit') {
+            // 訪問行: 回数+1（0→1→2→...→9→0）
+            const currentValue = cell ? (parseInt(cell.inputValue) || 0) : 0;
+            const newValue = currentValue >= 9 ? 0 : currentValue + 1;
+            this.scheduleController.updateCell(userId, date, cellType, newValue.toString());
+        }
+    }
+
+    /**
+     * セル右クリック
+     * @param {Event} e - イベント
+     * @param {HTMLElement} td - セル要素
+     */
+    handleCellRightClick(e, td) {
+        e.preventDefault();
+        
+        const userId = td.dataset.userId;
+        const date = td.dataset.date;
+        const cellType = td.dataset.cellType;
+        
+        this.logger.debug(`Cell right-clicked: ${userId}, ${date}, ${cellType}`);
+        
+        // TODO: 右クリックメニュー表示（Phase 3で実装）
+        console.log('Right-click menu will be implemented in Phase 3');
+    }
+
+    /**
+     * セルホバー
+     * @param {Event} e - イベント
+     * @param {HTMLElement} td - セル要素
+     */
+    handleCellHover(e, td) {
+        const userId = td.dataset.userId;
+        const date = td.dataset.date;
+        const cellType = td.dataset.cellType;
+        
+        // TODO: ツールチップ表示（Phase 2で実装）
+        const cell = this.scheduleController.getCell(userId, date, cellType);
+        if (cell && !cell.isEmpty()) {
+            td.title = this.getCellTooltip(cell, userId, date);
+        }
+    }
+
+    /**
+     * セルホバー解除
+     * @param {Event} e - イベント
+     * @param {HTMLElement} td - セル要素
+     */
+    handleCellLeave(e, td) {
+        // ツールチップは自動で消える
+    }
+
+    // ==================== ユーティリティ ====================
+
+    /**
+     * 指定月の日付配列を取得
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {Array<string>} 日付配列（"YYYY-MM-DD"形式）
+     */
+    getDaysInMonth(yearMonth) {
+        if (!yearMonth) return [];
+        
+        const [year, month] = yearMonth.split('-').map(Number);
+        const daysCount = DateUtils.getDaysInMonth(year, month);
+        
+        const dates = [];
+        for (let day = 1; day <= daysCount; day++) {
+            const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            dates.push(date);
+        }
+        
+        return dates;
+    }
+
+    /**
+     * セルのツールチップテキストを取得
+     * @param {ScheduleCell} cell - セル
      * @param {string} userId - 利用者ID
-     * @param {string} dateStr - 日付文字列
-     * @param {string} cellType - セルタイプ
+     * @param {string} date - 日付
+     * @returns {string}
      */
-    updateCell(userId, dateStr, cellType) {
-        try {
-            const td = this.container.querySelector(
-                `[data-user-id="${userId}"][data-date="${dateStr}"][data-cell-type="${cellType}"]`
-            );
-            
-            if (td) {
-                const scheduleController = this.app.getController('schedule');
-                const cell = scheduleController.getCell(userId, dateStr, cellType);
-                
-                if (cell) {
-                    td.textContent = cell.inputValue || '';
-                    this.applyCellStyle(td, cell, cellType);
-                }
-            }
-            
-        } catch (error) {
-            Logger?.warn('Cell update failed:', userId, dateStr, cellType, error);
+    getCellTooltip(cell, userId, date) {
+        const user = this.scheduleController.getUserById(userId);
+        const userName = user ? user.name : '不明';
+        
+        const lines = [];
+        lines.push(userName);
+        
+        if (date !== 'prevMonth' && date !== 'nextMonth') {
+            lines.push(DateUtils.formatDate(date, 'YYYY/MM/DD (ddd)'));
         }
-    }
-    
-    /**
-     * グリッド全体を再描画
-     */
-    refresh() {
-        this.render();
-    }
-    
-    /**
-     * 現在の月の日付一覧を取得
-     * @returns {Date[]}
-     */
-    getDatesForCurrentMonth() {
-        try {
-            const yearMonth = this.app.getCurrentYearMonth();
-            if (!yearMonth) {
-                return [];
-            }
-            
-            const [year, month] = yearMonth.split('-').map(Number);
-            const daysInMonth = new Date(year, month, 0).getDate();
-            
-            const dates = [];
-            for (let day = 1; day <= daysInMonth; day++) {
-                dates.push(new Date(year, month - 1, day));
-            }
-            
-            return dates;
-            
-        } catch (error) {
-            Logger?.error('Failed to get dates for current month:', error);
-            return [];
+        
+        // 値の説明
+        if (cell.inputValue === AppConfig.SYMBOLS.FULL_DAY) {
+            lines.push('通い全日');
+        } else if (cell.inputValue === AppConfig.SYMBOLS.MORNING) {
+            lines.push('通い前半');
+        } else if (cell.inputValue === AppConfig.SYMBOLS.AFTERNOON) {
+            lines.push('通い後半');
+        } else if (cell.inputValue === AppConfig.SYMBOLS.CHECK_IN) {
+            lines.push('入所');
+        } else if (cell.inputValue === AppConfig.SYMBOLS.CHECK_OUT) {
+            lines.push('退所');
+        } else if (cell.inputValue && !isNaN(cell.inputValue)) {
+            lines.push(`訪問 ${cell.inputValue}回`);
         }
-    }
-    
-    /**
-     * 利用者一覧を取得
-     * @returns {User[]}
-     */
-    getUsers() {
-        try {
-            const scheduleController = this.app.getController('schedule');
-            
-            if (scheduleController && scheduleController.users) {
-                return scheduleController.users;
-            }
-            
-            // フォールバック: デフォルトユーザー
-            if (typeof DEFAULT_USERS !== 'undefined') {
-                return DEFAULT_USERS;
-            }
-            
-            return [];
-            
-        } catch (error) {
-            Logger?.error('Failed to get users:', error);
-            return [];
+        
+        // 備考
+        if (cell.note) {
+            lines.push('');
+            lines.push('備考:');
+            lines.push(cell.note);
         }
+        
+        return lines.join('\n');
     }
-    
+
     /**
-     * デバッグ情報を取得
-     * @returns {object}
+     * グリッドをクリア
      */
-    getDebugInfo() {
-        return {
-            hasContainer: !!this.container,
-            hasTable: !!this.table,
-            userCount: this.getUsers().length,
-            dateCount: this.getDatesForCurrentMonth().length,
-            currentMonth: this.app.getCurrentYearMonth()
-        };
+    clear() {
+        this.container.innerHTML = '';
     }
 }
 
-// グローバルに登録
+// グローバル変数として公開
 window.ScheduleGrid = ScheduleGrid;
-
-Logger?.info('ScheduleGrid class loaded');

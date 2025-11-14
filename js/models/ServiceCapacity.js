@@ -1,348 +1,287 @@
 /**
- * 小規模多機能利用調整システム - ServiceCapacityモデル
- * 定員チェックを行うモデルクラス
+ * ServiceCapacityクラス（定員管理）
+ * 月全体の定員状況を管理・集計
  */
-
 class ServiceCapacity {
-  // 定員定数
-  static DAY_CAPACITY = 15;     // 通い定員
-  static STAY_CAPACITY = 9;     // 泊り定員
-  static REGISTRATION_CAPACITY = 29; // 登録定員
-
-  /**
-   * ServiceCapacityは静的メソッドのみを提供するため
-   * インスタンスの作成は禁止
-   */
-  constructor() {
-    throw new Error('ServiceCapacity is a static class and cannot be instantiated');
-  }
-
-  /**
-   * 定員設定を初期化（AppConfigから取得）
-   * @private
-   */
-  static _initializeCapacities() {
-    if (typeof window.AppConfig !== 'undefined' && window.AppConfig.CAPACITY) {
-      this.DAY_CAPACITY = window.AppConfig.CAPACITY.DAY || 15;
-      this.STAY_CAPACITY = window.AppConfig.CAPACITY.STAY || 9;
-      this.REGISTRATION_CAPACITY = window.AppConfig.CAPACITY.REGISTRATION || 29;
+    /**
+     * コンストラクタ
+     * @param {Array<ScheduleCalendar>} calendars - 全利用者のカレンダー配列
+     */
+    constructor(calendars = []) {
+        this.calendars = calendars;
+        this.logger = new Logger('ServiceCapacity');
     }
-  }
 
-  /**
-   * 依存関係をチェック
-   * @private
-   */
-  static _checkDependencies() {
-    const dependencies = ['DateUtils', 'DailyCapacity', 'ScheduleCalendar'];
-    const missing = dependencies.filter(dep => typeof window[dep] === 'undefined');
-
-    if (missing.length > 0) {
-      throw new Error(`ServiceCapacity requires: ${missing.join(', ')}`);
+    /**
+     * カレンダーを設定
+     * @param {Array<ScheduleCalendar>} calendars - カレンダー配列
+     */
+    setCalendars(calendars) {
+        this.calendars = calendars;
     }
-  }
 
-  /**
-   * 指定日の定員状況をチェック
-   * @param {Date|string} date - チェック対象の日付
-   * @param {ScheduleCalendar[]} calendars - スケジュールカレンダー配列
-   * @param {User[]} users - 利用者配列（オプション）
-   * @returns {DailyCapacity} 日別定員状況
-   */
-  static checkDate(date, calendars = [], users = []) {
-    try {
-      // 依存関係チェック
-      this._checkDependencies();
-      this._initializeCapacities();
+    /**
+     * 指定日の定員状況をチェック
+     * @param {string} date - "YYYY-MM-DD"形式
+     * @returns {DailyCapacity}
+     */
+    checkDate(date) {
+        const capacity = new DailyCapacity(date);
 
-      // DailyCapacityオブジェクトを作成
-      const dailyCapacity = new window.DailyCapacity(date);
-      const targetDateStr = window.DateUtils.formatDate(date);
-
-      window.Logger?.debug(`Checking capacity for ${targetDateStr}`);
-
-      // 利用者IDとUserオブジェクトのマップを作成
-      const userMap = new Map();
-      if (Array.isArray(users)) {
-        users.forEach(user => {
-          if (user && (user.id || user.userId)) {
-            const userId = user.id || user.userId;
-            userMap.set(userId, user);
-          }
-        });
-      }
-
-      // 各カレンダーをチェック
-      if (Array.isArray(calendars)) {
-        for (const calendar of calendars) {
-          if (!(calendar instanceof window.ScheduleCalendar)) {
-            window.Logger?.warn('Invalid calendar object, skipping');
-            continue;
-          }
-
-          try {
-            // 通泊セルをチェック
+        this.calendars.forEach(calendar => {
+            // 通泊行のセル
             const dayStayCell = calendar.getCell(date, 'dayStay');
             if (dayStayCell) {
-              const flags = dayStayCell.actualFlags;
-              const user = userMap.get(calendar.userId) || { id: calendar.userId, name: 'Unknown' };
-
-              // 通いサービス
-              if (flags.day) {
-                dailyCapacity.addDayUser(user);
-                window.Logger?.debug(`Added day user: ${calendar.userId}`);
-              }
-
-              // 宿泊サービス
-              if (flags.stay) {
-                dailyCapacity.addStayUser(user);
-                window.Logger?.debug(`Added stay user: ${calendar.userId}`);
-              }
+                capacity.addCellCount(dayStayCell);
             }
 
-            // 訪問セルをチェック
+            // 訪問行のセル
             const visitCell = calendar.getCell(date, 'visit');
-            if (visitCell && visitCell.actualFlags.visit > 0) {
-              dailyCapacity.addVisitCount(visitCell.actualFlags.visit);
-              window.Logger?.debug(`Added visit count: ${visitCell.actualFlags.visit} for ${calendar.userId}`);
+            if (visitCell) {
+                capacity.addCellCount(visitCell);
             }
+        });
 
-          } catch (error) {
-            window.Logger?.warn(`Error processing calendar for ${calendar.userId}:`, error);
-          }
+        this.logger.debug(`Date checked: ${date}, ${capacity.getSummaryText()}`);
+        
+        return capacity;
+    }
+
+    /**
+     * 月全体の定員状況をチェック
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {Array<DailyCapacity>}
+     */
+    checkMonth(yearMonth) {
+        const {year, month} = DateUtils.parseYearMonth(yearMonth);
+        const daysInMonth = DateUtils.getDaysInMonth(year, month);
+        const capacities = [];
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = `${yearMonth}-${String(day).padStart(2, '0')}`;
+            const capacity = this.checkDate(dateStr);
+            capacities.push(capacity);
         }
-      }
 
-      window.Logger?.debug(`Capacity check complete for ${targetDateStr}: ${dailyCapacity.getSummary()}`);
-      return dailyCapacity;
-
-    } catch (error) {
-      window.Logger?.error('Error in ServiceCapacity.checkDate:', error);
-
-      // エラー時は空のDailyCapacityを返す
-      try {
-        return new window.DailyCapacity(date);
-      } catch (fallbackError) {
-        throw new Error('Failed to create fallback DailyCapacity');
-      }
-    }
-  }
-
-  /**
-   * 指定月の全日付について定員状況をチェック
-   * @param {string} yearMonth - 年月文字列（"YYYY-MM"形式）
-   * @param {ScheduleCalendar[]} calendars - スケジュールカレンダー配列
-   * @param {User[]} users - 利用者配列（オプション）
-   * @returns {DailyCapacity[]} 日別定員状況の配列
-   */
-  static checkMonth(yearMonth, calendars = [], users = []) {
-    try {
-      // 依存関係チェック
-      this._checkDependencies();
-      this._initializeCapacities();
-
-      window.Logger?.debug(`Checking monthly capacity for ${yearMonth}`);
-
-      // 月の全日付を取得
-      const dates = window.DateUtils.getMonthDates(yearMonth);
-      const results = [];
-
-      // 各日付について定員チェックを実行
-      for (const date of dates) {
-        const dailyCapacity = this.checkDate(date, calendars, users);
-        results.push(dailyCapacity);
-      }
-
-      window.Logger?.info(`Monthly capacity check complete for ${yearMonth}: ${results.length} days processed`);
-      return results;
-
-    } catch (error) {
-      window.Logger?.error('Error in ServiceCapacity.checkMonth:', error);
-      return [];
-    }
-  }
-
-  /**
-   * 複数月の定員状況をチェック
-   * @param {string[]} yearMonths - 年月文字列の配列
-   * @param {ScheduleCalendar[]} calendars - スケジュールカレンダー配列
-   * @param {User[]} users - 利用者配列（オプション）
-   * @returns {Object} 年月をキーとした日別定員状況のマップ
-   */
-  static checkMultipleMonths(yearMonths, calendars = [], users = []) {
-    const results = {};
-
-    if (!Array.isArray(yearMonths)) {
-      return results;
+        this.logger.info(`Month checked: ${yearMonth}, ${daysInMonth} days`);
+        
+        return capacities;
     }
 
-    for (const yearMonth of yearMonths) {
-      if (typeof yearMonth === 'string' && /^\d{4}-\d{2}$/.test(yearMonth)) {
-        results[yearMonth] = this.checkMonth(yearMonth, calendars, users);
-      }
+    /**
+     * 定員オーバーの日付を取得
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {Array<Date>}
+     */
+    getOverCapacityDates(yearMonth) {
+        const capacities = this.checkMonth(yearMonth);
+        const overCapacityDates = capacities
+            .filter(c => c.isOverCapacity())
+            .map(c => c.date);
+
+        this.logger.info(`Over capacity dates: ${overCapacityDates.length} days`);
+        
+        return overCapacityDates;
     }
 
-    return results;
-  }
-
-  /**
-   * 定員オーバーの日付を抽出
-   * @param {DailyCapacity[]} dailyCapacities - 日別定員状況の配列
-   * @returns {DailyCapacity[]} 定員オーバーの日の配列
-   */
-  static getOverCapacityDays(dailyCapacities) {
-    if (!Array.isArray(dailyCapacities)) {
-      return [];
+    /**
+     * 定員オーバーの日別定員情報を取得
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {Array<DailyCapacity>}
+     */
+    getOverCapacities(yearMonth) {
+        const capacities = this.checkMonth(yearMonth);
+        return DailyCapacity.filterOverCapacity(capacities);
     }
 
-    return dailyCapacities.filter(capacity => 
-      capacity instanceof window.DailyCapacity && capacity.isOverCapacity()
-    );
-  }
+    /**
+     * 月のサマリー情報を取得
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {object}
+     */
+    getSummary(yearMonth) {
+        const capacities = this.checkMonth(yearMonth);
+        
+        // 前半通いの平均・最大
+        const dayMorningCounts = capacities.map(c => c.dayCountMorning);
+        const dayMorningAvg = dayMorningCounts.reduce((a, b) => a + b, 0) / dayMorningCounts.length;
+        const dayMorningMax = Math.max(...dayMorningCounts);
 
-  /**
-   * 定員の使用率統計を取得
-   * @param {DailyCapacity[]} dailyCapacities - 日別定員状況の配列
-   * @returns {Object} 使用率統計
-   */
-  static getUsageStats(dailyCapacities) {
-    if (!Array.isArray(dailyCapacities) || dailyCapacities.length === 0) {
-      return {
-        dayUsage: { min: 0, max: 0, avg: 0 },
-        stayUsage: { min: 0, max: 0, avg: 0 },
-        overCapacityDays: 0,
-        totalDays: 0
-      };
+        // 後半通いの平均・最大
+        const dayAfternoonCounts = capacities.map(c => c.dayCountAfternoon);
+        const dayAfternoonAvg = dayAfternoonCounts.reduce((a, b) => a + b, 0) / dayAfternoonCounts.length;
+        const dayAfternoonMax = Math.max(...dayAfternoonCounts);
+
+        // 通いの最大値（前半後半の最大）
+        const dayMaxCounts = capacities.map(c => c.getMaxDayCount());
+        const dayMaxAvg = dayMaxCounts.reduce((a, b) => a + b, 0) / dayMaxCounts.length;
+        const dayMax = Math.max(...dayMaxCounts);
+
+        // 泊りの平均・最大
+        const stayCounts = capacities.map(c => c.stayCount);
+        const stayAvg = stayCounts.reduce((a, b) => a + b, 0) / stayCounts.length;
+        const stayMax = Math.max(...stayCounts);
+
+        // 訪問の合計
+        const visitTotal = capacities.reduce((sum, c) => sum + c.visitCount, 0);
+
+        // 定員オーバー日数
+        const overCapacityDays = capacities.filter(c => c.isOverCapacity()).length;
+
+        // 各記号の日数
+        const symbolCounts = {
+            '◎': capacities.filter(c => c.getCapacitySymbol() === '◎').length,
+            '○': capacities.filter(c => c.getCapacitySymbol() === '○').length,
+            '△': capacities.filter(c => c.getCapacitySymbol() === '△').length,
+            '×': capacities.filter(c => c.getCapacitySymbol() === '×').length
+        };
+
+        return {
+            yearMonth: yearMonth,
+            totalDays: capacities.length,
+            day: {
+                morningAvg: Math.round(dayMorningAvg * 10) / 10,
+                morningMax: dayMorningMax,
+                afternoonAvg: Math.round(dayAfternoonAvg * 10) / 10,
+                afternoonMax: dayAfternoonMax,
+                maxAvg: Math.round(dayMaxAvg * 10) / 10,
+                max: dayMax,
+                limit: AppConfig.CAPACITY.DAY_LIMIT
+            },
+            stay: {
+                avg: Math.round(stayAvg * 10) / 10,
+                max: stayMax,
+                limit: AppConfig.CAPACITY.STAY_LIMIT
+            },
+            visit: {
+                total: visitTotal,
+                avg: Math.round((visitTotal / capacities.length) * 10) / 10
+            },
+            overCapacity: {
+                days: overCapacityDays,
+                rate: Math.round((overCapacityDays / capacities.length) * 100)
+            },
+            symbols: symbolCounts
+        };
     }
 
-    const validCapacities = dailyCapacities.filter(cap => cap instanceof window.DailyCapacity);
-    
-    if (validCapacities.length === 0) {
-      return {
-        dayUsage: { min: 0, max: 0, avg: 0 },
-        stayUsage: { min: 0, max: 0, avg: 0 },
-        overCapacityDays: 0,
-        totalDays: 0
-      };
+    /**
+     * 週末の定員状況を取得
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {Array<DailyCapacity>}
+     */
+    getWeekendCapacities(yearMonth) {
+        const capacities = this.checkMonth(yearMonth);
+        return DailyCapacity.filterWeekends(capacities);
     }
 
-    const dayUsageRates = validCapacities.map(cap => cap.getDayUsageRate());
-    const stayUsageRates = validCapacities.map(cap => cap.getStayUsageRate());
-    const overCapacityCount = validCapacities.filter(cap => cap.isOverCapacity()).length;
-
-    return {
-      dayUsage: {
-        min: Math.min(...dayUsageRates),
-        max: Math.max(...dayUsageRates),
-        avg: dayUsageRates.reduce((sum, rate) => sum + rate, 0) / dayUsageRates.length
-      },
-      stayUsage: {
-        min: Math.min(...stayUsageRates),
-        max: Math.max(...stayUsageRates),
-        avg: stayUsageRates.reduce((sum, rate) => sum + rate, 0) / stayUsageRates.length
-      },
-      overCapacityDays: overCapacityCount,
-      totalDays: validCapacities.length
-    };
-  }
-
-  /**
-   * 月別サマリーを取得
-   * @param {string} yearMonth - 年月文字列
-   * @param {DailyCapacity[]} dailyCapacities - 日別定員状況の配列
-   * @returns {Object} 月別サマリー
-   */
-  static getMonthlySummary(yearMonth, dailyCapacities) {
-    const stats = this.getUsageStats(dailyCapacities);
-    const overCapacityDays = this.getOverCapacityDays(dailyCapacities);
-
-    // 各日の合計を計算
-    const totalDayCount = dailyCapacities.reduce((sum, cap) => sum + (cap.dayCount || 0), 0);
-    const totalStayCount = dailyCapacities.reduce((sum, cap) => sum + (cap.stayCount || 0), 0);
-    const totalVisitCount = dailyCapacities.reduce((sum, cap) => sum + (cap.visitCount || 0), 0);
-
-    return {
-      yearMonth,
-      totalDays: dailyCapacities.length,
-      overCapacityDays: overCapacityDays.length,
-      overCapacityDates: overCapacityDays.map(cap => cap.getDateString()),
-      usage: stats,
-      totals: {
-        day: totalDayCount,
-        stay: totalStayCount,
-        visit: totalVisitCount
-      },
-      averages: {
-        day: dailyCapacities.length > 0 ? totalDayCount / dailyCapacities.length : 0,
-        stay: dailyCapacities.length > 0 ? totalStayCount / dailyCapacities.length : 0,
-        visit: dailyCapacities.length > 0 ? totalVisitCount / dailyCapacities.length : 0
-      }
-    };
-  }
-
-  /**
-   * 現在の定員設定を取得
-   * @returns {Object} 定員設定
-   */
-  static getCurrentCapacities() {
-    this._initializeCapacities();
-
-    return {
-      day: this.DAY_CAPACITY,
-      stay: this.STAY_CAPACITY,
-      registration: this.REGISTRATION_CAPACITY
-    };
-  }
-
-  /**
-   * 定員設定を更新
-   * @param {Object} capacities - 新しい定員設定
-   * @param {number} capacities.day - 通い定員
-   * @param {number} capacities.stay - 泊り定員
-   * @param {number} capacities.registration - 登録定員
-   */
-  static updateCapacities(capacities) {
-    if (capacities.day && typeof capacities.day === 'number' && capacities.day > 0) {
-      this.DAY_CAPACITY = capacities.day;
-    }
-    if (capacities.stay && typeof capacities.stay === 'number' && capacities.stay > 0) {
-      this.STAY_CAPACITY = capacities.stay;
-    }
-    if (capacities.registration && typeof capacities.registration === 'number' && capacities.registration > 0) {
-      this.REGISTRATION_CAPACITY = capacities.registration;
+    /**
+     * 特定の利用率以上の日を取得
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @param {number} threshold - 利用率の閾値（0-100）
+     * @returns {Array<DailyCapacity>}
+     */
+    getHighUtilizationDays(yearMonth, threshold = 80) {
+        const capacities = this.checkMonth(yearMonth);
+        return capacities.filter(c => c.getMaxUtilizationRate() >= threshold);
     }
 
-    window.Logger?.info('Capacities updated:', this.getCurrentCapacities());
-  }
-
-  /**
-   * デバッグ情報を出力
-   * @param {DailyCapacity[]} dailyCapacities - 日別定員状況の配列
-   */
-  static debug(dailyCapacities) {
-    if (!Array.isArray(dailyCapacities)) {
-      window.Logger?.info('ServiceCapacity Debug: No data provided');
-      return;
+    /**
+     * 日ごとの定員推移データを取得（グラフ用）
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {object}
+     */
+    getChartData(yearMonth) {
+        const capacities = this.checkMonth(yearMonth);
+        
+        return {
+            labels: capacities.map(c => c.date.getDate()),
+            datasets: [
+                {
+                    label: '通い（前半）',
+                    data: capacities.map(c => c.dayCountMorning)
+                },
+                {
+                    label: '通い（後半）',
+                    data: capacities.map(c => c.dayCountAfternoon)
+                },
+                {
+                    label: '泊り',
+                    data: capacities.map(c => c.stayCount)
+                }
+            ],
+            limits: {
+                day: AppConfig.CAPACITY.DAY_LIMIT,
+                stay: AppConfig.CAPACITY.STAY_LIMIT
+            }
+        };
     }
 
-    const summary = dailyCapacities.map(cap => ({
-      date: cap.getDateString(),
-      summary: cap.getSummary(),
-      status: cap.getStatusIcon()
-    }));
+    /**
+     * 定員状況のテキストレポートを生成
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {string}
+     */
+    generateReport(yearMonth) {
+        const summary = this.getSummary(yearMonth);
+        const overCapacities = this.getOverCapacities(yearMonth);
+        
+        let report = `■ ${yearMonth} 定員状況レポート\n\n`;
+        
+        // サマリー
+        report += `【概要】\n`;
+        report += `総日数: ${summary.totalDays}日\n`;
+        report += `定員オーバー: ${summary.overCapacity.days}日 (${summary.overCapacity.rate}%)\n\n`;
+        
+        // 通い
+        report += `【通い】定員 ${summary.day.limit}人\n`;
+        report += `  前半: 平均 ${summary.day.morningAvg}人, 最大 ${summary.day.morningMax}人\n`;
+        report += `  後半: 平均 ${summary.day.afternoonAvg}人, 最大 ${summary.day.afternoonMax}人\n`;
+        report += `  最大値: 平均 ${summary.day.maxAvg}人, 最大 ${summary.day.max}人\n\n`;
+        
+        // 泊り
+        report += `【泊り】定員 ${summary.stay.limit}人\n`;
+        report += `  平均: ${summary.stay.avg}人, 最大 ${summary.stay.max}人\n\n`;
+        
+        // 訪問
+        report += `【訪問】\n`;
+        report += `  合計: ${summary.visit.total}回, 1日平均: ${summary.visit.avg}回\n\n`;
+        
+        // 定員状況記号
+        report += `【定員状況】\n`;
+        report += `  ◎（良好）: ${summary.symbols['◎']}日\n`;
+        report += `  ○（通常）: ${summary.symbols['○']}日\n`;
+        report += `  △（注意）: ${summary.symbols['△']}日\n`;
+        report += `  ×（超過）: ${summary.symbols['×']}日\n\n`;
+        
+        // 定員オーバー詳細
+        if (overCapacities.length > 0) {
+            report += `【定員オーバー詳細】\n`;
+            overCapacities.forEach(c => {
+                const dateStr = DateUtils.formatDate(c.date);
+                const dayName = DateUtils.getDayName(c.date);
+                report += `  ${dateStr}(${dayName}): ${c.getSummaryText()}\n`;
+            });
+        }
+        
+        return report;
+    }
 
-    const stats = this.getUsageStats(dailyCapacities);
-    const overCapacityDays = this.getOverCapacityDays(dailyCapacities);
-
-    window.Logger?.group('ServiceCapacity Debug Info');
-    window.Logger?.info('Current Capacities:', this.getCurrentCapacities());
-    window.Logger?.info('Total Days:', dailyCapacities.length);
-    window.Logger?.info('Over Capacity Days:', overCapacityDays.length);
-    window.Logger?.info('Usage Stats:', stats);
-    window.Logger?.table(summary);
-    window.Logger?.groupEnd();
-  }
+    /**
+     * JSON形式に変換
+     * @param {string} yearMonth - "YYYY-MM"形式
+     * @returns {object}
+     */
+    toJSON(yearMonth) {
+        const capacities = this.checkMonth(yearMonth);
+        
+        return {
+            yearMonth: yearMonth,
+            capacities: capacities.map(c => c.toJSON()),
+            summary: this.getSummary(yearMonth)
+        };
+    }
 }
 
-// グローバルに登録
+// グローバル変数として公開
 window.ServiceCapacity = ServiceCapacity;

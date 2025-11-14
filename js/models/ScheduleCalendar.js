@@ -1,512 +1,409 @@
 /**
- * 小規模多機能利用調整システム - ScheduleCalendarモデル
- * 1利用者×1ヶ月の予定を管理するモデルクラス
+ * ScheduleCalendarクラス（月間予定）
+ * 1人の利用者の1ヶ月分の予定を管理
  */
-
 class ScheduleCalendar {
-  /**
-   * ScheduleCalendarコンストラクタ
-   * @param {string} userId - 利用者ID
-   * @param {string} yearMonth - 年月文字列（"YYYY-MM"形式）
-   */
-  constructor(userId, yearMonth) {
-    // 依存関係チェック
-    if (typeof window.DateUtils === 'undefined') {
-      throw new Error('ScheduleCalendar model requires DateUtils utility');
-    }
-    if (typeof window.ScheduleCell === 'undefined') {
-      throw new Error('ScheduleCalendar model requires ScheduleCell model');
-    }
-    if (typeof window.StayPeriod === 'undefined') {
-      throw new Error('ScheduleCalendar model requires StayPeriod model');
-    }
-
-    // 必須パラメータチェック
-    if (!userId || typeof userId !== 'string') {
-      throw new Error('userId is required and must be a string');
-    }
-    if (!yearMonth || typeof yearMonth !== 'string') {
-      throw new Error('yearMonth is required and must be a string');
+    /**
+     * コンストラクタ
+     * @param {string} userId - 利用者ID
+     * @param {string} yearMonth - "YYYY-MM"形式
+     */
+    constructor(userId, yearMonth) {
+        this.userId = userId;
+        this.yearMonth = yearMonth;
+        this.cells = new Map();  // キー: "date_cellType", 値: ScheduleCell
+        this.prevMonthCell = null;  // 左特別セル（通泊）
+        this.nextMonthCell = null;  // 右特別セル（通泊）
+        this.prevMonthVisitCell = null;  // 左特別セル（訪問）
+        this.nextMonthVisitCell = null;  // 右特別セル（訪問）
+        this.stayPeriods = [];  // StayPeriod[]
+        
+        this.logger = new Logger('ScheduleCalendar');
+        
+        this._initializeCells();
     }
 
-    this.userId = userId;
-    this.yearMonth = yearMonth;
+    /**
+     * セルを初期化
+     * @private
+     */
+    _initializeCells() {
+        const {year, month} = DateUtils.parseYearMonth(this.yearMonth);
+        const daysInMonth = DateUtils.getDaysInMonth(year, month);
 
-    // セルを格納するMap（キー: dateString）
-    this.dayStayCells = new Map();
-    this.visitCells = new Map();
+        // 特別セルの初期化
+        this.prevMonthCell = new ScheduleCell({
+            userId: this.userId,
+            date: `${this.yearMonth}-prevMonth`,
+            cellType: 'dayStay'
+        });
 
-    // 宿泊期間のリスト
-    this.stayPeriods = [];
+        this.nextMonthCell = new ScheduleCell({
+            userId: this.userId,
+            date: `${this.yearMonth}-nextMonth`,
+            cellType: 'dayStay'
+        });
 
-    // バリデーション
-    this._validate();
-  }
+        this.prevMonthVisitCell = new ScheduleCell({
+            userId: this.userId,
+            date: `${this.yearMonth}-prevMonth`,
+            cellType: 'visit'
+        });
 
-  /**
-   * バリデーション
-   * @private
-   */
-  _validate() {
-    // yearMonthの形式チェック
-    if (!/^\d{4}-\d{2}$/.test(this.yearMonth)) {
-      throw new Error('yearMonth must be in YYYY-MM format');
-    }
+        this.nextMonthVisitCell = new ScheduleCell({
+            userId: this.userId,
+            date: `${this.yearMonth}-nextMonth`,
+            cellType: 'visit'
+        });
 
-    // 月の存在チェック
-    try {
-      const dates = window.DateUtils.getMonthDates(this.yearMonth);
-      if (dates.length === 0) {
-        throw new Error('Invalid yearMonth');
-      }
-    } catch (error) {
-      throw new Error(`Invalid yearMonth: ${this.yearMonth}`);
-    }
-  }
+        // 通常セルの初期化（1〜31日、通泊行+訪問行）
+        for (let day = 1; day <= 31; day++) {
+            const dateStr = `${this.yearMonth}-${String(day).padStart(2, '0')}`;
+            
+            // 通泊行
+            const dayStayCell = new ScheduleCell({
+                userId: this.userId,
+                date: dateStr,
+                cellType: 'dayStay'
+            });
+            this.cells.set(`${dateStr}_dayStay`, dayStayCell);
 
-  /**
-   * 日付文字列をキーに変換
-   * @param {Date|string} date - 日付
-   * @returns {string} 日付文字列キー
-   * @private
-   */
-  _getDateKey(date) {
-    if (typeof date === 'string') {
-      return date;
-    }
-    return window.DateUtils.formatDate(date);
-  }
-
-  /**
-   * セルを取得（なければ空セルを生成）
-   * @param {Date|string} date - 日付
-   * @param {string} cellType - セルタイプ（"dayStay" | "visit"）
-   * @returns {ScheduleCell} セル
-   */
-  getCell(date, cellType) {
-    const dateKey = this._getDateKey(date);
-    const cells = cellType === 'dayStay' ? this.dayStayCells : this.visitCells;
-
-    if (!cells.has(dateKey)) {
-      // 空セルを作成
-      const cell = window.ScheduleCell.createEmpty(this.userId, date, cellType);
-      cells.set(dateKey, cell);
-    }
-
-    return cells.get(dateKey);
-  }
-
-  /**
-   * セルを設定
-   * @param {ScheduleCell} cell - 設定するセル
-   */
-  setCell(cell) {
-    if (!(cell instanceof window.ScheduleCell)) {
-      throw new Error('cell must be a ScheduleCell instance');
-    }
-
-    if (cell.userId !== this.userId) {
-      throw new Error('cell userId must match calendar userId');
-    }
-
-    const dateKey = this._getDateKey(cell.date);
-    const cells = cell.cellType === 'dayStay' ? this.dayStayCells : this.visitCells;
-
-    cells.set(dateKey, cell);
-
-    window.Logger?.debug(`Cell set for ${this.userId} on ${dateKey} (${cell.cellType}): "${cell.inputValue}"`);
-  }
-
-  /**
-   * セルを削除
-   * @param {Date|string} date - 日付
-   * @param {string} cellType - セルタイプ
-   */
-  removeCell(date, cellType) {
-    const dateKey = this._getDateKey(date);
-    const cells = cellType === 'dayStay' ? this.dayStayCells : this.visitCells;
-
-    if (cells.has(dateKey)) {
-      cells.delete(dateKey);
-      window.Logger?.debug(`Cell removed for ${this.userId} on ${dateKey} (${cellType})`);
-    }
-  }
-
-  /**
-   * yearMonthの全日付を取得
-   * @returns {Date[]} 全日付の配列
-   */
-  getAllDates() {
-    return window.DateUtils.getMonthDates(this.yearMonth);
-  }
-
-  /**
-   * 通いセルのリストを取得
-   * @returns {ScheduleCell[]} 通いセルの配列
-   */
-  getDayCells() {
-    return Array.from(this.dayStayCells.values())
-      .filter(cell => cell.actualFlags.day);
-  }
-
-  /**
-   * 泊りセルのリストを取得
-   * @returns {ScheduleCell[]} 泊りセルの配列
-   */
-  getStayCells() {
-    return Array.from(this.dayStayCells.values())
-      .filter(cell => cell.actualFlags.stay);
-  }
-
-  /**
-   * 訪問セルのリストを取得
-   * @returns {ScheduleCell[]} 訪問セルの配列
-   */
-  getVisitCells() {
-    return Array.from(this.visitCells.values())
-      .filter(cell => cell.actualFlags.visit > 0);
-  }
-
-  /**
-   * 全セルのリストを取得
-   * @returns {ScheduleCell[]} 全セルの配列
-   */
-  getAllCells() {
-    const dayStayCells = Array.from(this.dayStayCells.values());
-    const visitCells = Array.from(this.visitCells.values());
-    return [...dayStayCells, ...visitCells];
-  }
-
-  /**
-   * 入力されているセルのみを取得
-   * @returns {ScheduleCell[]} 入力されているセルの配列
-   */
-  getInputCells() {
-    return this.getAllCells().filter(cell => !cell.isEmpty());
-  }
-
-  /**
-   * "入所"〜"退所"を検出してstayPeriodsを更新
-   */
-  calculateStayPeriods() {
-    this.stayPeriods = [];
-
-    // 日付順にソート
-    const dateKeys = Array.from(this.dayStayCells.keys()).sort();
-
-    let startDate = null;
-    let currentPeriod = null;
-
-    for (const dateKey of dateKeys) {
-      const cell = this.dayStayCells.get(dateKey);
-
-      if (cell.isStayStart()) {
-        // 入所
-        if (currentPeriod) {
-          // 前の期間が終了していない場合は警告
-          window.Logger?.warn(`Unclosed stay period found for ${this.userId}, ending at ${dateKey}`);
+            // 訪問行
+            const visitCell = new ScheduleCell({
+                userId: this.userId,
+                date: dateStr,
+                cellType: 'visit'
+            });
+            this.cells.set(`${dateStr}_visit`, visitCell);
         }
-        startDate = new Date(cell.date);
-        currentPeriod = { start: startDate, userId: this.userId };
+    }
 
-      } else if (cell.isStayEnd() && startDate) {
-        // 退所（対応する入所がある場合）
-        try {
-          const period = new window.StayPeriod(startDate, cell.date, this.userId);
-          this.stayPeriods.push(period);
-          window.Logger?.debug(`Stay period added: ${period.getPeriodString()}`);
-        } catch (error) {
-          window.Logger?.warn('Error creating stay period:', error);
+    /**
+     * セルを取得
+     * @param {string} date - "YYYY-MM-DD"形式
+     * @param {string} cellType - 'dayStay' | 'visit'
+     * @returns {ScheduleCell|null}
+     */
+    getCell(date, cellType = 'dayStay') {
+        // 特別セルの場合
+        if (date.endsWith('-prevMonth')) {
+            return cellType === 'dayStay' ? this.prevMonthCell : this.prevMonthVisitCell;
+        }
+        if (date.endsWith('-nextMonth')) {
+            return cellType === 'dayStay' ? this.nextMonthCell : this.nextMonthVisitCell;
         }
 
-        startDate = null;
-        currentPeriod = null;
-      }
+        // 通常セル
+        const key = `${date}_${cellType}`;
+        return this.cells.get(key) || null;
     }
 
-    // 未終了の期間がある場合の警告
-    if (currentPeriod) {
-      window.Logger?.warn(`Unclosed stay period found for ${this.userId}, started at ${window.DateUtils.formatDate(startDate)}`);
-    }
-
-    window.Logger?.debug(`Calculated ${this.stayPeriods.length} stay periods for ${this.userId} in ${this.yearMonth}`);
-  }
-
-  /**
-   * stayPeriodsを元に全セルのactualFlagsを計算
-   */
-  calculateAllFlags() {
-    // 全セルのフラグをリセット
-    for (const cell of this.dayStayCells.values()) {
-      cell.resetActualFlags();
-    }
-    for (const cell of this.visitCells.values()) {
-      cell.resetActualFlags();
-    }
-
-    // 各宿泊期間について処理
-    for (const period of this.stayPeriods) {
-      const dates = period.getDates();
-
-      for (const date of dates) {
-        const dateKey = this._getDateKey(date);
-
-        // 通泊セルの処理
-        if (this.dayStayCells.has(dateKey)) {
-          const cell = this.dayStayCells.get(dateKey);
-          cell.actualFlags.stay = true;
-          cell.actualFlags.day = true; // 宿泊中は通いも利用
-        } else {
-          // セルが存在しない場合は空セルを作成してフラグを設定
-          const cell = window.ScheduleCell.createEmpty(this.userId, date, 'dayStay');
-          cell.actualFlags.stay = true;
-          cell.actualFlags.day = true;
-          this.dayStayCells.set(dateKey, cell);
+    /**
+     * セル値を設定
+     * @param {string} date - "YYYY-MM-DD"形式
+     * @param {string} cellType - 'dayStay' | 'visit'
+     * @param {string} value - セル値
+     * @returns {object} {valid: boolean, message: string}
+     */
+    setCell(date, cellType, value) {
+        const cell = this.getCell(date, cellType);
+        if (!cell) {
+            return { valid: false, message: '無効なセルです' };
         }
-      }
-    }
 
-    // 通い単体の処理（数値入力など）
-    for (const cell of this.dayStayCells.values()) {
-      if (!cell.actualFlags.stay && !cell.isEmpty()) {
-        if (cell.isNumericInput()) {
-          const count = cell.getNumericValue();
-          if (count > 0) {
-            cell.actualFlags.day = true;
-          }
-        } else if (!cell.isStayStart() && !cell.isStayEnd()) {
-          // 特別な入力値でない場合は通いとして扱う
-          cell.actualFlags.day = true;
+        const result = cell.setValue(value);
+        if (result.valid) {
+            // 宿泊期間を再計算
+            this.calculateStayPeriods();
+            this.calculateAllFlags();
         }
-      }
+
+        return result;
     }
 
-    // 訪問セルの処理
-    for (const cell of this.visitCells.values()) {
-      if (!cell.isEmpty()) {
-        if (cell.isNumericInput()) {
-          cell.actualFlags.visit = cell.getNumericValue();
-        } else {
-          // 数値でない場合は1回とみなす
-          cell.actualFlags.visit = 1;
+    /**
+     * 前月特別セルを取得
+     * @param {string} cellType - 'dayStay' | 'visit'
+     * @returns {ScheduleCell}
+     */
+    getPrevMonthCell(cellType = 'dayStay') {
+        return cellType === 'dayStay' ? this.prevMonthCell : this.prevMonthVisitCell;
+    }
+
+    /**
+     * 翌月特別セルを取得
+     * @param {string} cellType - 'dayStay' | 'visit'
+     * @returns {ScheduleCell}
+     */
+    getNextMonthCell(cellType = 'dayStay') {
+        return cellType === 'dayStay' ? this.nextMonthCell : this.nextMonthVisitCell;
+    }
+
+    /**
+     * 宿泊期間を計算
+     */
+    calculateStayPeriods() {
+        this.stayPeriods = [];
+
+        const {year, month} = DateUtils.parseYearMonth(this.yearMonth);
+        const daysInMonth = DateUtils.getDaysInMonth(year, month);
+
+        // 月内の宿泊期間を計算
+        let stayStartDate = null;
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = `${this.yearMonth}-${String(day).padStart(2, '0')}`;
+            const cell = this.getCell(dateStr, 'dayStay');
+
+            if (!cell) continue;
+
+            if (cell.isStayStart()) {
+                // 入所
+                stayStartDate = DateUtils.parseDate(dateStr);
+            } else if (cell.isStayEnd() && stayStartDate) {
+                // 退所
+                const stayEndDate = DateUtils.parseDate(dateStr);
+                this.stayPeriods.push(new StayPeriod({
+                    startDate: stayStartDate,
+                    endDate: stayEndDate,
+                    userId: this.userId
+                }));
+                stayStartDate = null;
+            }
         }
-      }
+
+        // 月またぎ宿泊の計算
+        const crossMonthPeriods = this.calculateCrossMonthStay();
+        this.stayPeriods.push(...crossMonthPeriods);
+
+        this.logger.debug(`Stay periods calculated: ${this.stayPeriods.length} periods`);
     }
 
-    window.Logger?.debug(`Calculated flags for ${this.userId} in ${this.yearMonth}`);
-  }
+    /**
+     * 月またぎ宿泊を計算
+     * @returns {Array<StayPeriod>}
+     */
+    calculateCrossMonthStay() {
+        const periods = [];
+        const {year, month} = DateUtils.parseYearMonth(this.yearMonth);
 
-  /**
-   * 宿泊期間とフラグを一括計算
-   */
-  calculateAll() {
-    this.calculateStayPeriods();
-    this.calculateAllFlags();
-  }
-
-  /**
-   * 指定日のサービス情報を取得
-   * @param {Date|string} date - 日付
-   * @returns {Object} サービス情報
-   */
-  getServiceInfo(date) {
-    const dayStayCell = this.getCell(date, 'dayStay');
-    const visitCell = this.getCell(date, 'visit');
-
-    return {
-      date: this._getDateKey(date),
-      dayOfWeek: window.DateUtils.getDayOfWeek(date),
-      isWeekend: window.DateUtils.isWeekend(date),
-      dayStay: {
-        inputValue: dayStayCell.inputValue,
-        displayValue: dayStayCell.getDisplayValue(),
-        note: dayStayCell.note,
-        actualFlags: { ...dayStayCell.actualFlags },
-        statusInfo: dayStayCell.getStatusInfo()
-      },
-      visit: {
-        inputValue: visitCell.inputValue,
-        displayValue: visitCell.getDisplayValue(),
-        note: visitCell.note,
-        actualFlags: { ...visitCell.actualFlags },
-        statusInfo: visitCell.getStatusInfo()
-      }
-    };
-  }
-
-  /**
-   * 月の統計情報を取得
-   * @returns {Object} 統計情報
-   */
-  getMonthlyStats() {
-    const dayCells = this.getDayCells();
-    const stayCells = this.getStayCells();
-    const visitCells = this.getVisitCells();
-
-    const totalVisits = visitCells.reduce((sum, cell) => sum + cell.getVisitCount(), 0);
-
-    return {
-      userId: this.userId,
-      yearMonth: this.yearMonth,
-      dayCount: dayCells.length,
-      stayCount: stayCells.length,
-      visitCount: totalVisits,
-      stayPeriodCount: this.stayPeriods.length,
-      totalStayDays: this.stayPeriods.reduce((sum, period) => sum + period.getDuration(), 0),
-      inputCellCount: this.getInputCells().length,
-      totalCellCount: this.getAllCells().length
-    };
-  }
-
-  /**
-   * 月の詳細情報を取得
-   * @returns {Object} 詳細情報
-   */
-  getMonthlyDetail() {
-    const dates = this.getAllDates();
-    const services = dates.map(date => this.getServiceInfo(date));
-
-    return {
-      userId: this.userId,
-      yearMonth: this.yearMonth,
-      dates: dates.map(date => this._getDateKey(date)),
-      services,
-      stayPeriods: this.stayPeriods.map(period => period.toJSON()),
-      stats: this.getMonthlyStats()
-    };
-  }
-
-  /**
-   * オブジェクトをJSON形式に変換
-   * @returns {Object} JSON形式のオブジェクト
-   */
-  toJSON() {
-    const dayStayCellsData = {};
-    for (const [key, cell] of this.dayStayCells) {
-      dayStayCellsData[key] = cell.toJSON();
-    }
-
-    const visitCellsData = {};
-    for (const [key, cell] of this.visitCells) {
-      visitCellsData[key] = cell.toJSON();
-    }
-
-    return {
-      userId: this.userId,
-      yearMonth: this.yearMonth,
-      dayStayCells: dayStayCellsData,
-      visitCells: visitCellsData,
-      stayPeriods: this.stayPeriods.map(period => period.toJSON()),
-      stats: this.getMonthlyStats()
-    };
-  }
-
-  /**
-   * JSON形式のデータからScheduleCalendarインスタンスを生成
-   * @param {Object} data - JSON形式のデータ
-   * @returns {ScheduleCalendar} ScheduleCalendarインスタンス
-   */
-  static fromJSON(data) {
-    if (!data || typeof data !== 'object') {
-      throw new Error('Invalid data for ScheduleCalendar.fromJSON');
-    }
-
-    try {
-      const calendar = new ScheduleCalendar(data.userId, data.yearMonth);
-
-      // dayStayCellsの復元
-      if (data.dayStayCells) {
-        for (const [dateKey, cellData] of Object.entries(data.dayStayCells)) {
-          const cell = window.ScheduleCell.fromJSON(cellData);
-          calendar.dayStayCells.set(dateKey, cell);
+        // 前月から継続する宿泊
+        if (this.prevMonthCell && !this.prevMonthCell.isEmpty()) {
+            // 前月の入所日を取得（特別セルの値から）
+            // 例: "11/28入" → "2025-11-28"
+            const prevMonthDate = this._parseSpecialCellDate(this.prevMonthCell.inputValue, 'prev');
+            
+            if (prevMonthDate) {
+                // 当月の退所日を探す
+                const daysInMonth = DateUtils.getDaysInMonth(year, month);
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dateStr = `${this.yearMonth}-${String(day).padStart(2, '0')}`;
+                    const cell = this.getCell(dateStr, 'dayStay');
+                    
+                    if (cell && cell.isStayEnd()) {
+                        periods.push(new StayPeriod({
+                            startDate: prevMonthDate,
+                            endDate: DateUtils.parseDate(dateStr),
+                            userId: this.userId
+                        }));
+                        break;
+                    }
+                }
+            }
         }
-      }
 
-      // visitCellsの復元
-      if (data.visitCells) {
-        for (const [dateKey, cellData] of Object.entries(data.visitCells)) {
-          const cell = window.ScheduleCell.fromJSON(cellData);
-          calendar.visitCells.set(dateKey, cell);
+        // 翌月へ継続する宿泊
+        if (this.nextMonthCell && !this.nextMonthCell.isEmpty()) {
+            // 翌月の退所日を取得（特別セルの値から）
+            // 例: "1/3退" → "2026-01-03"
+            const nextMonthDate = this._parseSpecialCellDate(this.nextMonthCell.inputValue, 'next');
+            
+            if (nextMonthDate) {
+                // 当月の入所日を探す
+                const daysInMonth = DateUtils.getDaysInMonth(year, month);
+                for (let day = daysInMonth; day >= 1; day--) {
+                    const dateStr = `${this.yearMonth}-${String(day).padStart(2, '0')}`;
+                    const cell = this.getCell(dateStr, 'dayStay');
+                    
+                    if (cell && cell.isStayStart()) {
+                        periods.push(new StayPeriod({
+                            startDate: DateUtils.parseDate(dateStr),
+                            endDate: nextMonthDate,
+                            userId: this.userId
+                        }));
+                        break;
+                    }
+                }
+            }
         }
-      }
 
-      // stayPeriodsの復元
-      if (data.stayPeriods && Array.isArray(data.stayPeriods)) {
-        calendar.stayPeriods = data.stayPeriods.map(periodData => 
-          window.StayPeriod.fromJSON(periodData)
-        );
-      }
-
-      return calendar;
-    } catch (error) {
-      window.Logger?.error('Error creating ScheduleCalendar from JSON:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 複数のJSON形式データからScheduleCalendarインスタンス配列を生成
-   * @param {Array} dataArray - JSON形式データの配列
-   * @returns {ScheduleCalendar[]} ScheduleCalendarインスタンスの配列
-   */
-  static fromJSONArray(dataArray) {
-    if (!Array.isArray(dataArray)) {
-      throw new Error('Input must be an array');
+        return periods;
     }
 
-    return dataArray.map((data, index) => {
-      try {
-        return ScheduleCalendar.fromJSON(data);
-      } catch (error) {
-        window.Logger?.error(`Error creating ScheduleCalendar from JSON at index ${index}:`, error);
-        throw error;
-      }
-    });
-  }
+    /**
+     * 特別セルの日付を解析
+     * @param {string} value - 特別セルの値（例: "11/28入", "1/3退"）
+     * @param {string} direction - 'prev' | 'next'
+     * @returns {Date|null}
+     * @private
+     */
+    _parseSpecialCellDate(value, direction) {
+        if (!value) return null;
 
-  /**
-   * 文字列表現を取得
-   * @returns {string} 文字列表現
-   */
-  toString() {
-    const stats = this.getMonthlyStats();
-    return `ScheduleCalendar(${this.userId}, ${this.yearMonth}): Day=${stats.dayCount}, Stay=${stats.stayCount}, Visit=${stats.visitCount}`;
-  }
+        // "M/D入" または "M/D退" の形式を想定
+        const match = value.match(/(\d+)\/(\d+)/);
+        if (!match) return null;
 
-  /**
-   * 2つのScheduleCalendarインスタンスが同じかどうかを比較
-   * @param {ScheduleCalendar} other - 比較対象のScheduleCalendar
-   * @returns {boolean} 同じかどうか
-   */
-  equals(other) {
-    if (!(other instanceof ScheduleCalendar)) {
-      return false;
+        const {year, month} = DateUtils.parseYearMonth(this.yearMonth);
+        const targetMonth = direction === 'prev' ? month - 1 : month + 1;
+        const targetYear = targetMonth < 1 ? year - 1 : targetMonth > 12 ? year + 1 : year;
+        const normalizedMonth = targetMonth < 1 ? 12 : targetMonth > 12 ? 1 : targetMonth;
+
+        const day = parseInt(match[2]);
+        return new Date(targetYear, normalizedMonth - 1, day);
     }
 
-    return this.userId === other.userId && this.yearMonth === other.yearMonth;
-  }
-
-  /**
-   * ScheduleCalendarインスタンスのクローンを作成
-   * @returns {ScheduleCalendar} クローンされたScheduleCalendarインスタンス
-   */
-  clone() {
-    const cloned = new ScheduleCalendar(this.userId, this.yearMonth);
-
-    // セルをクローン
-    for (const [key, cell] of this.dayStayCells) {
-      cloned.dayStayCells.set(key, cell.clone());
+    /**
+     * 全セルのフラグを再計算
+     */
+    calculateAllFlags() {
+        // 各セルのstayフラグを宿泊期間に基づいて更新
+        this.stayPeriods.forEach(period => {
+            const dates = period.getDatesInMonth(this.yearMonth);
+            
+            dates.forEach(date => {
+                const dateStr = DateUtils.formatDate(date);
+                const cell = this.getCell(dateStr, 'dayStay');
+                
+                if (cell && !cell.isEmpty()) {
+                    // 退所日は泊りフラグをfalseに
+                    if (cell.isStayEnd()) {
+                        cell.actualFlags.stay = false;
+                        // 退所日は通いとしてカウント
+                        cell.actualFlags.day = true;
+                    } else {
+                        cell.actualFlags.stay = true;
+                    }
+                }
+            });
+        });
     }
-    for (const [key, cell] of this.visitCells) {
-      cloned.visitCells.set(key, cell.clone());
+
+    /**
+     * 月の日数を取得
+     * @returns {number}
+     */
+    getDaysInMonth() {
+        const {year, month} = DateUtils.parseYearMonth(this.yearMonth);
+        return DateUtils.getDaysInMonth(year, month);
     }
 
-    // 宿泊期間をクローン
-    cloned.stayPeriods = this.stayPeriods.map(period => period.clone());
+    /**
+     * 全セルをクリア
+     */
+    clear() {
+        this.cells.forEach(cell => {
+            cell.inputValue = '';
+            cell.calculateFlags();
+        });
+        
+        if (this.prevMonthCell) {
+            this.prevMonthCell.inputValue = '';
+            this.prevMonthCell.calculateFlags();
+        }
+        
+        if (this.nextMonthCell) {
+            this.nextMonthCell.inputValue = '';
+            this.nextMonthCell.calculateFlags();
+        }
 
-    return cloned;
-  }
+        if (this.prevMonthVisitCell) {
+            this.prevMonthVisitCell.inputValue = '';
+            this.prevMonthVisitCell.calculateFlags();
+        }
+
+        if (this.nextMonthVisitCell) {
+            this.nextMonthVisitCell.inputValue = '';
+            this.nextMonthVisitCell.calculateFlags();
+        }
+
+        this.stayPeriods = [];
+        
+        this.logger.info(`Calendar cleared: ${this.userId} ${this.yearMonth}`);
+    }
+
+    /**
+     * JSON形式に変換
+     * @returns {object}
+     */
+    toJSON() {
+        const cellsObj = {};
+        
+        // 通常セル
+        this.cells.forEach((cell, key) => {
+            if (!cell.isEmpty() || cell.hasNote()) {
+                cellsObj[key] = cell.toJSON();
+            }
+        });
+
+        // 特別セル
+        if (this.prevMonthCell && (!this.prevMonthCell.isEmpty() || this.prevMonthCell.hasNote())) {
+            cellsObj[`${this.yearMonth}-prevMonth_dayStay`] = this.prevMonthCell.toJSON();
+        }
+        if (this.nextMonthCell && (!this.nextMonthCell.isEmpty() || this.nextMonthCell.hasNote())) {
+            cellsObj[`${this.yearMonth}-nextMonth_dayStay`] = this.nextMonthCell.toJSON();
+        }
+        if (this.prevMonthVisitCell && (!this.prevMonthVisitCell.isEmpty() || this.prevMonthVisitCell.hasNote())) {
+            cellsObj[`${this.yearMonth}-prevMonth_visit`] = this.prevMonthVisitCell.toJSON();
+        }
+        if (this.nextMonthVisitCell && (!this.nextMonthVisitCell.isEmpty() || this.nextMonthVisitCell.hasNote())) {
+            cellsObj[`${this.yearMonth}-nextMonth_visit`] = this.nextMonthVisitCell.toJSON();
+        }
+
+        return {
+            userId: this.userId,
+            yearMonth: this.yearMonth,
+            cells: cellsObj,
+            stayPeriods: this.stayPeriods.map(p => p.toJSON())
+        };
+    }
+
+    /**
+     * JSONからScheduleCalendarインスタンスを作成
+     * @param {object} json - JSONデータ
+     * @returns {ScheduleCalendar}
+     */
+    static fromJSON(json) {
+        const calendar = new ScheduleCalendar(json.userId, json.yearMonth);
+        
+        // セルデータを復元
+        if (json.cells) {
+            Object.entries(json.cells).forEach(([key, cellData]) => {
+                const cell = ScheduleCell.fromJSON(cellData);
+                
+                // 特別セルの判定
+                if (key.includes('-prevMonth_dayStay')) {
+                    calendar.prevMonthCell = cell;
+                } else if (key.includes('-nextMonth_dayStay')) {
+                    calendar.nextMonthCell = cell;
+                } else if (key.includes('-prevMonth_visit')) {
+                    calendar.prevMonthVisitCell = cell;
+                } else if (key.includes('-nextMonth_visit')) {
+                    calendar.nextMonthVisitCell = cell;
+                } else {
+                    calendar.cells.set(key, cell);
+                }
+            });
+        }
+
+        // 宿泊期間を復元
+        if (json.stayPeriods) {
+            calendar.stayPeriods = StayPeriod.fromJSONArray(json.stayPeriods);
+        }
+
+        return calendar;
+    }
 }
 
-// グローバルに登録
+// グローバル変数として公開
 window.ScheduleCalendar = ScheduleCalendar;

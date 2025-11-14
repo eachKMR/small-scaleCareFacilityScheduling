@@ -1,253 +1,160 @@
 /**
- * 小規模多機能利用調整システム - Userモデル
- * 利用者を表すモデルクラス
+ * Userクラス（利用者）
+ * 利用者の基本情報を管理
  */
-
 class User {
-  /**
-   * Userコンストラクタ
-   * @param {Object} data - 利用者データ
-   * @param {string} data.id - 利用者ID（省略時は自動生成）
-   * @param {string} data.name - 氏名
-   * @param {Date|string} data.registrationDate - 登録日
-   * @param {string} data.note - 備考
-   * @param {boolean} data.isActive - 利用中フラグ
-   */
-  constructor(data = {}) {
-    // 依存関係チェック
-    if (typeof window.IdGenerator === 'undefined') {
-      throw new Error('User model requires IdGenerator utility');
-    }
-    if (typeof window.DateUtils === 'undefined') {
-      throw new Error('User model requires DateUtils utility');
+    /**
+     * コンストラクタ
+     * @param {object} data - 利用者データ
+     */
+    constructor(data = {}) {
+        this.id = data.id || IdGenerator.userId([]);
+        this.name = data.name || '';
+        this.registrationDate = data.registrationDate || DateUtils.formatDate(new Date());
+        this.sortId = data.sortId !== undefined ? data.sortId : 0;
+        this.note = data.note || '';
+        this.isActive = data.isActive !== false;
+        
+        this.logger = new Logger('User');
     }
 
-    // プロパティの初期化
-    this.id = data.id || window.IdGenerator.generate('user');
-    this.name = data.name || '';
-    this.note = data.note || '';
-    this.isActive = data.isActive !== undefined ? data.isActive : true;
+    /**
+     * 利用者名の妥当性チェック
+     * @returns {object} {valid: boolean, message: string}
+     */
+    validateName() {
+        return Validator.validateUserName(this.name);
+    }
 
-    // registrationDateの処理
-    if (data.registrationDate) {
-      if (typeof data.registrationDate === 'string') {
-        try {
-          this.registrationDate = window.DateUtils.parseDate(data.registrationDate);
-        } catch (error) {
-          window.Logger?.warn('Invalid registrationDate format, using current date:', data.registrationDate);
-          this.registrationDate = new Date();
+    /**
+     * 備考の妥当性チェック
+     * @returns {object} {valid: boolean, message: string}
+     */
+    validateNote() {
+        return Validator.validateNote(this.note);
+    }
+
+    /**
+     * 利用者データの妥当性チェック
+     * @returns {object} {valid: boolean, errors: Array}
+     */
+    validate() {
+        const errors = [];
+
+        const nameResult = this.validateName();
+        if (!nameResult.valid) {
+            errors.push({ field: 'name', message: nameResult.message });
         }
-      } else if (data.registrationDate instanceof Date) {
-        this.registrationDate = new Date(data.registrationDate);
-      } else {
-        this.registrationDate = new Date();
-      }
-    } else {
-      this.registrationDate = new Date();
+
+        const noteResult = this.validateNote();
+        if (!noteResult.valid) {
+            errors.push({ field: 'note', message: noteResult.message });
+        }
+
+        return {
+            valid: errors.length === 0,
+            errors: errors
+        };
     }
 
-    // バリデーション
-    this._validate();
-  }
-
-  /**
-   * バリデーション
-   * @private
-   */
-  _validate() {
-    if (!this.name || typeof this.name !== 'string' || this.name.trim().length === 0) {
-      throw new Error('User name is required and must be a non-empty string');
+    /**
+     * 論理削除
+     */
+    delete() {
+        this.isActive = false;
+        this.logger.info(`User deleted: ${this.id} (${this.name})`);
     }
 
-    if (!(this.registrationDate instanceof Date) || isNaN(this.registrationDate.getTime())) {
-      throw new Error('Invalid registrationDate');
+    /**
+     * 復元
+     */
+    restore() {
+        this.isActive = true;
+        this.logger.info(`User restored: ${this.id} (${this.name})`);
     }
 
-    if (typeof this.isActive !== 'boolean') {
-      throw new Error('isActive must be a boolean value');
+    /**
+     * 利用中かどうか
+     * @returns {boolean}
+     */
+    isActiveUser() {
+        return this.isActive === true;
     }
 
-    // 名前の長さチェック（AppConfigが利用可能な場合）
-    if (window.AppConfig && window.AppConfig.VALIDATION && window.AppConfig.VALIDATION.USER_NAME_MAX_LENGTH) {
-      const maxLength = window.AppConfig.VALIDATION.USER_NAME_MAX_LENGTH;
-      if (this.name.length > maxLength) {
-        throw new Error(`User name must be ${maxLength} characters or less`);
-      }
-    }
-  }
-
-  /**
-   * 利用者が現在利用中かどうか
-   * @returns {boolean} 利用中かどうか
-   */
-  isCurrentlyActive() {
-    return this.isActive;
-  }
-
-  /**
-   * 利用者の状態を変更
-   * @param {boolean} active - 新しい状態
-   */
-  setActive(active) {
-    if (typeof active !== 'boolean') {
-      throw new Error('Active status must be a boolean value');
-    }
-    this.isActive = active;
-  }
-
-  /**
-   * 備考を更新
-   * @param {string} note - 新しい備考
-   */
-  updateNote(note) {
-    if (typeof note !== 'string') {
-      throw new Error('Note must be a string');
-    }
-    this.note = note;
-  }
-
-  /**
-   * 登録からの経過日数を取得
-   * @returns {number} 経過日数
-   */
-  getDaysSinceRegistration() {
-    const today = window.DateUtils.today();
-    return window.DateUtils.daysBetween(this.registrationDate, today);
-  }
-
-  /**
-   * 登録日の年月を取得
-   * @returns {string} YYYY-MM形式の年月
-   */
-  getRegistrationYearMonth() {
-    return window.DateUtils.getYearMonth(this.registrationDate);
-  }
-
-  /**
-   * オブジェクトをJSON形式に変換
-   * @returns {Object} JSON形式のオブジェクト
-   */
-  toJSON() {
-    return {
-      id: this.id,
-      name: this.name,
-      registrationDate: window.DateUtils.formatDate(this.registrationDate),
-      note: this.note,
-      isActive: this.isActive,
-      // 追加情報
-      daysSinceRegistration: this.getDaysSinceRegistration(),
-      registrationYearMonth: this.getRegistrationYearMonth()
-    };
-  }
-
-  /**
-   * JSON形式のデータからUserインスタンスを生成
-   * @param {Object} data - JSON形式のデータ
-   * @returns {User} Userインスタンス
-   */
-  static fromJSON(data) {
-    if (!data || typeof data !== 'object') {
-      throw new Error('Invalid data for User.fromJSON');
+    /**
+     * JSON形式に変換
+     * @returns {object}
+     */
+    toJSON() {
+        return {
+            id: this.id,
+            name: this.name,
+            registrationDate: this.registrationDate,
+            sortId: this.sortId,
+            note: this.note,
+            isActive: this.isActive
+        };
     }
 
-    try {
-      return new User({
-        id: data.id,
-        name: data.name,
-        registrationDate: data.registrationDate,
-        note: data.note,
-        isActive: data.isActive
-      });
-    } catch (error) {
-      window.Logger?.error('Error creating User from JSON:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 複数のJSON形式データからUserインスタンス配列を生成
-   * @param {Array} dataArray - JSON形式データの配列
-   * @returns {User[]} Userインスタンスの配列
-   */
-  static fromJSONArray(dataArray) {
-    if (!Array.isArray(dataArray)) {
-      throw new Error('Input must be an array');
+    /**
+     * JSONからUserインスタンスを作成
+     * @param {object} json - JSONデータ
+     * @returns {User}
+     */
+    static fromJSON(json) {
+        return new User(json);
     }
 
-    return dataArray.map((data, index) => {
-      try {
-        return User.fromJSON(data);
-      } catch (error) {
-        window.Logger?.error(`Error creating User from JSON at index ${index}:`, error);
-        throw error;
-      }
-    });
-  }
-
-  /**
-   * デフォルトユーザーデータからUserインスタンス配列を生成
-   * @returns {User[]} Userインスタンスの配列
-   */
-  static fromDefaultUsers() {
-    if (typeof window.DEFAULT_USERS === 'undefined') {
-      window.Logger?.warn('DEFAULT_USERS not found');
-      return [];
+    /**
+     * 複数のユーザーをJSONから作成
+     * @param {Array} jsonArray - JSONデータの配列
+     * @returns {Array<User>}
+     */
+    static fromJSONArray(jsonArray) {
+        if (!Array.isArray(jsonArray)) {
+            return [];
+        }
+        return jsonArray.map(json => User.fromJSON(json));
     }
 
-    try {
-      return window.DEFAULT_USERS.map(userData => new User({
-        id: userData.id,
-        name: userData.name,
-        registrationDate: userData.registrationDate,
-        note: userData.note || '',
-        isActive: userData.isActive !== undefined ? userData.isActive : true
-      }));
-    } catch (error) {
-      window.Logger?.error('Error creating Users from DEFAULT_USERS:', error);
-      return [];
-    }
-  }
-
-  /**
-   * 文字列表現を取得
-   * @returns {string} 文字列表現
-   */
-  toString() {
-    const status = this.isActive ? '利用中' : '停止中';
-    return `User(${this.id}): ${this.name} [${status}]`;
-  }
-
-  /**
-   * 2つのUserインスタンスが同じかどうかを比較
-   * @param {User} other - 比較対象のUser
-   * @returns {boolean} 同じかどうか
-   */
-  equals(other) {
-    if (!(other instanceof User)) {
-      return false;
+    /**
+     * ユーザーを並び替え順でソート
+     * @param {Array<User>} users - ユーザーの配列
+     * @returns {Array<User>}
+     */
+    static sortBySortId(users) {
+        return users.slice().sort((a, b) => a.sortId - b.sortId);
     }
 
-    return this.id === other.id &&
-           this.name === other.name &&
-           window.DateUtils.isSameDate(this.registrationDate, other.registrationDate) &&
-           this.note === other.note &&
-           this.isActive === other.isActive;
-  }
+    /**
+     * 利用中のユーザーのみをフィルタ
+     * @param {Array<User>} users - ユーザーの配列
+     * @returns {Array<User>}
+     */
+    static filterActive(users) {
+        return users.filter(user => user.isActive);
+    }
 
-  /**
-   * Userインスタンスのクローンを作成
-   * @returns {User} クローンされたUserインスタンス
-   */
-  clone() {
-    return new User({
-      id: this.id,
-      name: this.name,
-      registrationDate: new Date(this.registrationDate),
-      note: this.note,
-      isActive: this.isActive
-    });
-  }
+    /**
+     * IDでユーザーを検索
+     * @param {Array<User>} users - ユーザーの配列
+     * @param {string} userId - 検索するユーザーID
+     * @returns {User|null}
+     */
+    static findById(users, userId) {
+        return users.find(user => user.id === userId) || null;
+    }
+
+    /**
+     * 氏名でユーザーを検索
+     * @param {Array<User>} users - ユーザーの配列
+     * @param {string} name - 検索する氏名
+     * @returns {Array<User>}
+     */
+    static findByName(users, name) {
+        return users.filter(user => user.name === name);
+    }
 }
 
-// グローバルに登録
+// グローバル変数として公開
 window.User = User;
