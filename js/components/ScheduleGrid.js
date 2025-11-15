@@ -215,7 +215,7 @@ class ScheduleGrid {
         
         // 1日～31日のセル
         this.daysInMonth.forEach(date => {
-            const cellType = rowType === 'dayStay' ? 'am' : 'visit'; // amはdayStayの代表
+            const cellType = rowType === 'dayStay' ? 'dayStay' : 'visit';
             const td = this.createCellElement(user, date, cellType);
             tr.appendChild(td);
         });
@@ -357,7 +357,7 @@ class ScheduleGrid {
             // 通泊行: ○ ⇔ 空白のトグル
             const currentValue = cell ? cell.inputValue : '';
             const newValue = currentValue === AppConfig.SYMBOLS.FULL_DAY ? '' : AppConfig.SYMBOLS.FULL_DAY;
-            this.scheduleController.updateCell(userId, date, 'am', newValue);
+            this.scheduleController.updateCell(userId, date, 'dayStay', newValue);
         } else if (rowType === 'visit') {
             // 訪問行: 回数+1（0→1→2→...→9→0）
             const currentValue = cell ? (parseInt(cell.inputValue) || 0) : 0;

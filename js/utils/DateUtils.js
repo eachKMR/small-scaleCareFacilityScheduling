@@ -38,14 +38,27 @@ class DateUtils {
 
     /**
      * 日付を文字列形式に変換
-     * @param {Date} date - 日付
-     * @returns {string} "YYYY-MM-DD"形式
+     * @param {Date|string} date - 日付オブジェクトまたは文字列
+     * @param {string} format - フォーマット (YYYY-MM-DD, YYYY-MM, YYYY年MM月, YYYY年MM月DD日, MM/DD など)
+     * @returns {string} フォーマット済み文字列
      */
-    static formatDate(date) {
+    static formatDate(date, format = 'YYYY-MM-DD') {
+        // 文字列の場合はDateオブジェクトに変換
+        if (typeof date === 'string') {
+            date = this.parseDate(date);
+        }
+        
         const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+        const month = date.getMonth() + 1;
+        const day = date.getDate();
+        
+        // フォーマット文字列を置換
+        return format
+            .replace('YYYY', year)
+            .replace('MM', String(month).padStart(2, '0'))
+            .replace('DD', String(day).padStart(2, '0'))
+            .replace('M', month)
+            .replace('D', day);
     }
 
     /**

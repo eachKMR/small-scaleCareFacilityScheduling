@@ -30,16 +30,13 @@ class CSVService {
                 const arrayBuffer = await file.arrayBuffer();
                 const text = await this._decodeShiftJIS(arrayBuffer);
                 
-                // 行分割（CRLF/LF対応）
-                const lines = text.split(/\r\n|\n/);
-                this.logger.debug(`File has ${lines.length} lines`);
+                // CSV全体を一度にパース（改行を含む列に対応）
+                const rows = this._parseCSVText(text);
+                this.logger.debug(`File has ${rows.length} rows (including header)`);
                 
-                // ヘッダー行をスキップして解析
-                for (let i = 1; i < lines.length; i++) {
-                    const line = lines[i].trim();
-                    if (!line) continue;
-                    
-                    const row = this._parseCSVLine(line);
+                // ヘッダー行をスキップしてallRowsに追加
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
                     if (row && row.length >= 16) {
                         allRows.push(row);
                     }
@@ -83,7 +80,74 @@ class CSVService {
     }
 
     /**
-     * CSV行をパース
+     * CSV全体をパース（引用符内の改行に対応）
+     * @param {string} text - CSV全体のテキスト
+     * @returns {Array<Array<string>>} 行の配列（各行は列の配列）
+     */
+    _parseCSVText(text) {
+        const rows = [];
+        let currentRow = [];
+        let currentCell = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            const nextChar = text[i + 1];
+            
+            if (char === '"') {
+                if (inQuotes && nextChar === '"') {
+                    // エスケープされた引用符（""）
+                    currentCell += '"';
+                    i++; // 次の引用符をスキップ
+                } else {
+                    // 引用符の開始/終了
+                    inQuotes = !inQuotes;
+                }
+            } else if (char === ',' && !inQuotes) {
+                // 列の区切り
+                currentRow.push(currentCell);
+                currentCell = '';
+            } else if ((char === '\r' && nextChar === '\n') || char === '\n') {
+                // 改行
+                if (inQuotes) {
+                    // 引用符内の改行はセルの一部として保持
+                    currentCell += char;
+                    if (char === '\r') {
+                        i++; // CRLFの場合、LFもスキップ
+                        currentCell += '\n';
+                    }
+                } else {
+                    // 行の終わり
+                    currentRow.push(currentCell);
+                    if (currentRow.length > 0) {
+                        rows.push(currentRow);
+                    }
+                    currentRow = [];
+                    currentCell = '';
+                    
+                    // CRLFの場合、LFをスキップ
+                    if (char === '\r' && nextChar === '\n') {
+                        i++;
+                    }
+                }
+            } else {
+                currentCell += char;
+            }
+        }
+        
+        // 最後のセルと行を追加
+        if (currentCell || currentRow.length > 0) {
+            currentRow.push(currentCell);
+            if (currentRow.length > 0) {
+                rows.push(currentRow);
+            }
+        }
+        
+        return rows;
+    }
+
+    /**
+     * CSV行をパース（単一行用・後方互換性のため残す）
      * @param {string} line - CSV行
      * @returns {Array<string>} 列の配列
      */
@@ -128,42 +192,66 @@ class CSVService {
      */
     _extractUsersAndPatterns(rows) {
         const userMap = new Map(); // userName → { dayPattern, visitPattern, stayPattern }
+        let currentUserName = null; // 現在処理中の利用者名
         
         for (const row of rows) {
-            // CSV列構造（要件定義書_データ管理.md 3.3節）
-            const userName = row[1];           // 列2: 利用者名
+            // CSV列構造
+            const userName = row[1];           // 列2: 利用者名（最初の行のみ）
             const serviceCode = row[4];        // 列5: サービスコード
             const weekPattern = row.slice(9, 16); // 列10-16: 月〜日
             
-            if (!userName || !serviceCode) {
+            // 利用者名が記載されている場合は、新しい利用者
+            if (userName && userName.trim() !== '') {
+                currentUserName = userName.trim();
+                
+                // 利用者エントリを初期化
+                if (!userMap.has(currentUserName)) {
+                    userMap.set(currentUserName, {
+                        name: currentUserName,
+                        dayPattern: ['-', '-', '-', '-', '-', '-', '-'],
+                        visitPattern: ['0', '0', '0', '0', '0', '0', '0'],
+                        stayPattern: ['-', '-', '-', '-', '-', '-', '-']
+                    });
+                }
+            }
+            
+            // サービスコードがない、または現在の利用者がない場合はスキップ
+            if (!serviceCode || !currentUserName) {
                 continue;
             }
             
-            // 利用者エントリを初期化
-            if (!userMap.has(userName)) {
-                userMap.set(userName, {
-                    name: userName,
-                    dayPattern: ['-', '-', '-', '-', '-', '-', '-'],
-                    visitPattern: ['0', '0', '0', '0', '0', '0', '0'],
-                    stayPattern: ['-', '-', '-', '-', '-', '-', '-']
-                });
+            // サービスコードの先頭2桁をチェック
+            const serviceCategory = serviceCode.slice(0, 2);
+            
+            // 06/07/08で始まらない場合はスキップ
+            if (!['06', '07', '08'].includes(serviceCategory)) {
+                continue;
             }
             
-            const pattern = userMap.get(userName);
+            const pattern = userMap.get(currentUserName);
             
-            // サービスコードで分類
-            if (serviceCode === '071111') {
-                // 通所（通い）
-                pattern.dayPattern = weekPattern.map(v => (v === '1' || v === '○') ? '1' : '-');
-            } else if (serviceCode === '071121') {
-                // 訪問
-                pattern.visitPattern = weekPattern.map(v => {
-                    const num = parseInt(v, 10);
-                    return isNaN(num) ? '0' : String(num);
+            // サービス種別ごとに週間パターンをOR結合
+            if (serviceCategory === '06') {
+                // 訪問: 回数を加算
+                weekPattern.forEach((v, idx) => {
+                    const currentNum = parseInt(pattern.visitPattern[idx], 10) || 0;
+                    const newNum = parseInt(v, 10) || 0;
+                    pattern.visitPattern[idx] = String(currentNum + newNum);
                 });
-            } else if (serviceCode === '071131') {
-                // 宿泊（泊り）
-                pattern.stayPattern = weekPattern.map(v => (v === '1' || v === '○') ? '1' : '-');
+            } else if (serviceCategory === '07') {
+                // 通所: OR結合（どちらかが'1'なら'1'）
+                weekPattern.forEach((v, idx) => {
+                    if (v === '1' || v === '○' || pattern.dayPattern[idx] === '1') {
+                        pattern.dayPattern[idx] = '1';
+                    }
+                });
+            } else if (serviceCategory === '08') {
+                // 宿泊: OR結合
+                weekPattern.forEach((v, idx) => {
+                    if (v === '1' || v === '○' || pattern.stayPattern[idx] === '1') {
+                        pattern.stayPattern[idx] = '1';
+                    }
+                });
             }
         }
         
@@ -177,8 +265,10 @@ class CSVService {
         userNames.sort((a, b) => a.localeCompare(b, 'ja'));
         
         userNames.forEach((userName, index) => {
+            // user001, user002, ... の形式でIDを生成
+            const userId = `user${String(index + 1).padStart(3, '0')}`;
             const user = new User({
-                id: IdGenerator.userId(index + 1),
+                id: userId,
                 name: userName,
                 registrationDate: new Date(),
                 sortId: index
@@ -234,7 +324,7 @@ class CSVService {
                 
                 // 通いパターン
                 if (pattern.dayPattern[patternIndex] === '1') {
-                    calendar.setCell(date, 'am', AppConfig.SYMBOLS.FULL_DAY);
+                    calendar.setCell(date, 'dayStay', AppConfig.SYMBOLS.FULL_DAY);
                 }
                 
                 // 訪問パターン
@@ -245,7 +335,7 @@ class CSVService {
                 
                 // 宿泊パターン（仮で「入」を設定、後で調整）
                 if (pattern.stayPattern[patternIndex] === '1') {
-                    calendar.setCell(date, 'am', AppConfig.SYMBOLS.CHECK_IN);
+                    calendar.setCell(date, 'dayStay', AppConfig.SYMBOLS.CHECK_IN);
                 }
             }
             
@@ -271,7 +361,7 @@ class CSVService {
         
         // 「入」が設定されているセルを収集
         for (const [key, cell] of calendar.cells) {
-            if (cell.cellType === 'am' && cell.inputValue === AppConfig.SYMBOLS.CHECK_IN) {
+            if (cell.cellType === 'dayStay' && cell.inputValue === AppConfig.SYMBOLS.CHECK_IN) {
                 stayCells.push(cell);
             }
         }
@@ -312,15 +402,15 @@ class CSVService {
             if (group.length === 1) {
                 // 単独宿泊: 入のみ（退所は同日に設定しない、要件に従う）
                 const cell = group[0];
-                calendar.setCell(cell.date, 'am', AppConfig.SYMBOLS.CHECK_IN);
+                calendar.setCell(cell.date, 'dayStay', AppConfig.SYMBOLS.CHECK_IN);
                 
             } else if (group.length === 2) {
                 // 2日連続: 入所→退所
                 const firstCell = group[0];
                 const lastCell = group[1];
                 
-                calendar.setCell(firstCell.date, 'am', AppConfig.SYMBOLS.CHECK_IN);
-                calendar.setCell(lastCell.date, 'am', AppConfig.SYMBOLS.CHECK_OUT);
+                calendar.setCell(firstCell.date, 'dayStay', AppConfig.SYMBOLS.CHECK_IN);
+                calendar.setCell(lastCell.date, 'dayStay', AppConfig.SYMBOLS.CHECK_OUT);
                 
             } else {
                 // 3日以上連続: 入所→○→...→退所
@@ -328,16 +418,16 @@ class CSVService {
                 const lastCell = group[group.length - 1];
                 
                 // 開始日: 入
-                calendar.setCell(firstCell.date, 'am', AppConfig.SYMBOLS.CHECK_IN);
+                calendar.setCell(firstCell.date, 'dayStay', AppConfig.SYMBOLS.CHECK_IN);
                 
                 // 中間日: ○
                 for (let i = 1; i < group.length - 1; i++) {
                     const cell = group[i];
-                    calendar.setCell(cell.date, 'am', AppConfig.SYMBOLS.FULL_DAY);
+                    calendar.setCell(cell.date, 'dayStay', AppConfig.SYMBOLS.FULL_DAY);
                 }
                 
                 // 終了日: 退
-                calendar.setCell(lastCell.date, 'am', AppConfig.SYMBOLS.CHECK_OUT);
+                calendar.setCell(lastCell.date, 'dayStay', AppConfig.SYMBOLS.CHECK_OUT);
             }
         }
         

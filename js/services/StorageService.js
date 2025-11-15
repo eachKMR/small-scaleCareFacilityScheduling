@@ -18,8 +18,9 @@ class StorageService {
      */
     saveUsers(users) {
         try {
+            const key = `${this.prefix}users`;
             const jsonData = users.map(user => user.toJSON());
-            localStorage.setItem('users', JSON.stringify(jsonData));
+            localStorage.setItem(key, JSON.stringify(jsonData));
             this.logger.info(`Users saved: ${users.length} users`);
             return true;
         } catch (error) {
@@ -31,8 +32,9 @@ class StorageService {
                 this.deleteOldestSchedule();
                 
                 try {
+                    const key = `${this.prefix}users`;
                     const jsonData = users.map(user => user.toJSON());
-                    localStorage.setItem('users', JSON.stringify(jsonData));
+                    localStorage.setItem(key, JSON.stringify(jsonData));
                     this.logger.info(`Users saved after cleanup: ${users.length} users`);
                     return true;
                 } catch (retryError) {
@@ -51,7 +53,8 @@ class StorageService {
      */
     loadUsers() {
         try {
-            const jsonStr = localStorage.getItem('users');
+            const key = `${this.prefix}users`;
+            const jsonStr = localStorage.getItem(key);
             
             if (!jsonStr) {
                 this.logger.info('No users found in storage');
@@ -75,7 +78,8 @@ class StorageService {
      * @returns {boolean}
      */
     hasUsers() {
-        const jsonStr = localStorage.getItem('users');
+        const key = `${this.prefix}users`;
+        const jsonStr = localStorage.getItem(key);
         return jsonStr !== null && jsonStr !== '[]';
     }
 
@@ -89,7 +93,7 @@ class StorageService {
      */
     saveSchedule(yearMonth, calendars) {
         try {
-            const key = `${this.prefix}schedule_${yearMonth}`;
+            const key = `${this.prefix}${yearMonth}`;
             
             // Map → Object に変換
             const data = {};
@@ -119,7 +123,7 @@ class StorageService {
                 this.deleteOldestSchedule();
                 
                 try {
-                    const key = `${this.prefix}schedule_${yearMonth}`;
+                    const key = `${this.prefix}${yearMonth}`;
                     const data = {};
                     calendars.forEach((calendar, userId) => {
                         data[userId] = calendar.toJSON();
@@ -145,7 +149,7 @@ class StorageService {
      */
     loadSchedule(yearMonth, users = []) {
         try {
-            const key = `${this.prefix}schedule_${yearMonth}`;
+            const key = `${this.prefix}${yearMonth}`;
             const jsonStr = localStorage.getItem(key);
             
             if (!jsonStr) {
@@ -216,7 +220,7 @@ class StorageService {
      * @returns {boolean}
      */
     hasSchedule(yearMonth) {
-        const key = `${this.prefix}schedule_${yearMonth}`;
+        const key = `${this.prefix}${yearMonth}`;
         return localStorage.getItem(key) !== null;
     }
 
@@ -227,7 +231,7 @@ class StorageService {
      */
     deleteSchedule(yearMonth) {
         try {
-            const key = `${this.prefix}schedule_${yearMonth}`;
+            const key = `${this.prefix}${yearMonth}`;
             localStorage.removeItem(key);
             this.logger.info(`Schedule deleted: ${yearMonth}`);
             return true;
@@ -456,11 +460,14 @@ class StorageService {
      */
     exportBackup() {
         try {
+            const usersKey = `${this.prefix}users`;
+            const notesKey = `${this.prefix}notes`;
+            
             const backup = {
                 version: '1.0',
                 exportDate: new Date().toISOString(),
-                users: localStorage.getItem('users'),
-                notes: localStorage.getItem('notes'),
+                users: localStorage.getItem(usersKey),
+                notes: localStorage.getItem(notesKey),
                 schedules: {}
             };
 
@@ -492,20 +499,23 @@ class StorageService {
                 return false;
             }
 
+            const usersKey = `${this.prefix}users`;
+            const notesKey = `${this.prefix}notes`;
+
             // 利用者マスタを復元
             if (backup.users) {
-                localStorage.setItem('users', backup.users);
+                localStorage.setItem(usersKey, backup.users);
             }
 
             // 備考を復元
             if (backup.notes) {
-                localStorage.setItem('notes', backup.notes);
+                localStorage.setItem(notesKey, backup.notes);
             }
 
             // スケジュールを復元
             if (backup.schedules) {
                 Object.entries(backup.schedules).forEach(([yearMonth, data]) => {
-                    const key = `${this.prefix}schedule_${yearMonth}`;
+                    const key = `${this.prefix}${yearMonth}`;
                     localStorage.setItem(key, data);
                 });
             }
