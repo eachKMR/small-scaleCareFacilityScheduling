@@ -135,7 +135,42 @@ class App {
             this.capacityCheckController
         );
         
+        // スクロール同期を設定
+        this.setupScrollSync(capacityContainer, gridContainer);
+        
         this.logger.info('Components initialized');
+    }
+
+    /**
+     * 定員ヘッダーとグリッドのスクロールを同期
+     * @param {HTMLElement} capacityContainer - 定員ヘッダーコンテナ
+     * @param {HTMLElement} gridContainer - グリッドコンテナ
+     */
+    setupScrollSync(capacityContainer, gridContainer) {
+        let isCapacityScrolling = false;
+        let isGridScrolling = false;
+        
+        // 定員ヘッダーのスクロール → グリッドに同期
+        capacityContainer.addEventListener('scroll', () => {
+            if (isGridScrolling) {
+                isGridScrolling = false;
+                return;
+            }
+            isCapacityScrolling = true;
+            gridContainer.scrollLeft = capacityContainer.scrollLeft;
+        });
+        
+        // グリッドのスクロール → 定員ヘッダーに同期
+        gridContainer.addEventListener('scroll', () => {
+            if (isCapacityScrolling) {
+                isCapacityScrolling = false;
+                return;
+            }
+            isGridScrolling = true;
+            capacityContainer.scrollLeft = gridContainer.scrollLeft;
+        });
+        
+        this.logger.info('Scroll synchronization setup completed');
     }
 
     /**
