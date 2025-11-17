@@ -175,7 +175,7 @@ class DailyCapacity {
      * @returns {boolean}
      */
     isDayFull() {
-        return this.getMaxDayCount() >= this.dayLimit;
+        return this.getMaxDayCount() > this.dayLimit;
     }
 
     /**
@@ -183,7 +183,7 @@ class DailyCapacity {
      * @returns {boolean}
      */
     isStayFull() {
-        return this.stayCount >= this.stayLimit;
+        return this.stayCount > this.stayLimit;
     }
 
     /**

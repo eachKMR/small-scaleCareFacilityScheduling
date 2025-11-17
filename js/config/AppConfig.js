@@ -6,6 +6,7 @@ const AppConfig = {
     // 記号定義
     SYMBOLS: {
         FULL_DAY: '○',      // 終日通い
+        STAY_MIDDLE: '◎',   // 連泊中（通い+泊り）
         MORNING: '◓',       // 前半通い
         AFTERNOON: '◒',     // 後半通い
         CHECK_IN: '入',     // 入所
@@ -46,8 +47,7 @@ const AppConfig = {
     STORAGE: {
         PREFIX: 'schedule_',             // LocalStorageキーのプレフィックス
         AUTO_SAVE: true,                 // 自動保存
-        MAX_MONTHS: 1,                   // 保持する月数
-        RESTORE_TIMEOUT: 5000            // 復元タイムアウト（ミリ秒）
+        MAX_MONTHS: 1                    // 保持する月数
     },
 
     // デフォルト値

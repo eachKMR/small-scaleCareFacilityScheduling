@@ -19,6 +19,14 @@ class ScheduleGrid {
         this.users = [];
         this.daysInMonth = [];
         
+        // CellEditorを初期化
+        this.cellEditor = new CellEditor(this, scheduleController);
+        
+        // グローバルなmouseupイベントでドラッグ終了を検知
+        document.addEventListener('mouseup', async () => {
+            await this.cellEditor.handleDragEnd();
+        });
+        
         // イベントリスナー
         this.setupEventListeners();
     }
@@ -45,6 +53,16 @@ class ScheduleGrid {
         this.scheduleController.on('cell:updated', (data) => {
             this.logger.debug('Cell updated:', data);
             this.updateCell(data.userId, data.date, data.cellType);
+        });
+
+        // 宿泊期間設定時
+        this.scheduleController.on('stayPeriodSet', (data) => {
+            this.logger.debug('Stay period set:', data);
+            // 期間内の全セルを更新
+            const dates = DateUtils.getDateRange(data.startDate, data.endDate);
+            dates.forEach(date => {
+                this.updateCell(data.userId, date, 'dayStay');
+            });
         });
 
         // 月変更時
@@ -249,13 +267,64 @@ class ScheduleGrid {
         // セルデータを取得して表示
         this.updateCellContent(td, user.id, date, cellType);
         
-        // イベントリスナー
-        td.addEventListener('click', (e) => this.handleCellClick(e, td));
-        td.addEventListener('contextmenu', (e) => this.handleCellRightClick(e, td));
+        // CellEditorのイベントリスナーを追加
+        this.attachCellEvents(td, user.id, date, cellType);
+        
+        // 既存のイベントリスナー（ホバー用）
         td.addEventListener('mouseenter', (e) => this.handleCellHover(e, td));
         td.addEventListener('mouseleave', (e) => this.handleCellLeave(e, td));
         
         return td;
+    }
+
+    /**
+     * セルにイベントを追加
+     * @param {HTMLElement} cell - セル要素
+     * @param {string} userId - 利用者ID
+     * @param {string} date - 日付
+     * @param {string} cellType - セルタイプ
+     */
+    attachCellEvents(cell, userId, date, cellType) {
+        // 特別セル（前月・翌月）はイベントなし
+        if (date === 'prevMonth' || date === 'nextMonth') {
+            return;
+        }
+        
+        // クリックイベント
+        cell.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            
+            // セルの実際の値を取得
+            const cellData = this.scheduleController.getCell(userId, date, cellType);
+            const currentValue = cellData ? cellData.inputValue : '';
+            
+            if (cellType === 'dayStay') {
+                await this.cellEditor.handleDayStayClick(userId, date, currentValue);
+            } else if (cellType === 'visit') {
+                await this.cellEditor.handleVisitClick(userId, date, currentValue);
+            }
+        });
+        
+        // 右クリックイベント（Phase 3）
+        cell.addEventListener('contextmenu', (e) => {
+            // セルの実際の値を取得
+            const cellData = this.scheduleController.getCell(userId, date, cellType);
+            const currentValue = cellData ? cellData.inputValue : '';
+            this.cellEditor.showContextMenu(e, userId, date, cellType, currentValue);
+        });
+        
+        // ドラッグイベント
+        cell.addEventListener('mousedown', (e) => {
+            this.cellEditor.handleDragStart(userId, date, cellType);
+        });
+        
+        cell.addEventListener('mouseenter', () => {
+            this.cellEditor.handleDragMove(userId, date, cellType);
+        });
+        
+        cell.addEventListener('mouseup', () => {
+            this.cellEditor.handleDragEnd();
+        });
     }
 
     /**
@@ -271,7 +340,7 @@ class ScheduleGrid {
         
         if (!cell || cell.isEmpty()) {
             td.textContent = '';
-            td.classList.remove('cell-has-value', 'cell-deleted', 'cell-has-note');
+            td.classList.remove('cell-has-value', 'cell-deleted', 'cell-has-note', 'cell-stay', 'cell-check-in', 'cell-check-out');
             return;
         }
         
@@ -279,7 +348,7 @@ class ScheduleGrid {
         if (cell.deletedValue) {
             td.textContent = '';
             td.classList.add('cell-deleted');
-            td.classList.remove('cell-has-value');
+            td.classList.remove('cell-has-value', 'cell-stay', 'cell-check-in', 'cell-check-out');
             return;
         }
         
@@ -293,9 +362,24 @@ class ScheduleGrid {
             td.classList.add('cell-has-note');
         }
         
-        // 宿泊期間の場合
-        if (cell.actualFlags && cell.actualFlags.stay) {
-            td.classList.add('cell-stay');
+        // 宿泊関連のクラスをクリア
+        td.classList.remove('cell-stay', 'cell-check-in', 'cell-check-out');
+        
+        // 宿泊関連のクラスを適用（Phase 1-A修正）
+        if (cellType === 'dayStay' && cell.inputValue) {
+            if (cell.inputValue === AppConfig.SYMBOLS.CHECK_IN) {
+                // 入: 薄青背景 + 左側青罫線
+                td.classList.add('cell-stay', 'cell-check-in');
+            } else if (cell.inputValue === AppConfig.SYMBOLS.STAY_MIDDLE) {
+                // ◎: 薄青背景のみ
+                td.classList.add('cell-stay');
+            } else if (cell.inputValue === AppConfig.SYMBOLS.CHECK_OUT) {
+                // 退: 薄青背景 + 右側青罫線
+                td.classList.add('cell-stay', 'cell-check-out');
+            } else if (cell.actualFlags && cell.actualFlags.stay) {
+                // その他の宿泊フラグがある場合
+                td.classList.add('cell-stay');
+            }
         }
         
         // 通いの種類に応じてクラスを追加
@@ -480,6 +564,73 @@ class ScheduleGrid {
      */
     clear() {
         this.container.innerHTML = '';
+    }
+
+    // ==================== CellEditor連携メソッド ====================
+
+    /**
+     * セル表示を更新（CellEditorから呼ばれる）
+     * @param {string} userId - 利用者ID
+     * @param {string} date - 日付
+     * @param {string} cellType - セルタイプ
+     */
+    updateCellDisplay(userId, date, cellType) {
+        const cell = this.findCellElement(userId, date, cellType);
+        if (!cell) return;
+        
+        const calendar = this.scheduleController.getCalendar(userId);
+        const scheduleCell = calendar.getCell(date, cellType);
+        
+        if (scheduleCell) {
+            // 値を更新
+            cell.textContent = scheduleCell.inputValue || '';
+        }
+    }
+
+    /**
+     * セル要素を検索（CellEditorから呼ばれる）
+     * @param {string} userId - 利用者ID
+     * @param {string} date - 日付
+     * @param {string} cellType - セルタイプ
+     * @returns {HTMLElement|null}
+     */
+    findCellElement(userId, date, cellType) {
+        return this.container.querySelector(
+            `.schedule-cell[data-user-id="${userId}"][data-date="${date}"][data-cell-type="${cellType}"]`
+        );
+    }
+
+    /**
+     * ドラッグ範囲をハイライト（CellEditorから呼ばれる）
+     * @param {string} userId - 利用者ID
+     * @param {string} startDate - 開始日
+     * @param {string} endDate - 終了日
+     */
+    highlightDragRange(userId, startDate, endDate) {
+        // 既存のハイライトをクリア
+        this.clearDragHighlight();
+        
+        // 日付の順序を正規化
+        const [start, end] = [startDate, endDate].sort();
+        
+        // 範囲内の日付を取得
+        const dates = DateUtils.getDateRange(start, end);
+        
+        // 各日付のdayStayセルにハイライトを追加
+        dates.forEach(date => {
+            const cell = this.findCellElement(userId, date, 'dayStay');
+            if (cell) {
+                cell.classList.add('drag-highlight');
+            }
+        });
+    }
+
+    /**
+     * ドラッグハイライトをクリア（CellEditorから呼ばれる）
+     */
+    clearDragHighlight() {
+        const highlighted = this.container.querySelectorAll('.drag-highlight');
+        highlighted.forEach(cell => cell.classList.remove('drag-highlight'));
     }
 }
 

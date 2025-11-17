@@ -86,6 +86,9 @@ class App {
         // CapacityCheckController
         this.capacityCheckController = new CapacityCheckController(this.scheduleController);
         
+        // Phase 1-B: ScheduleControllerにCapacityControllerを設定
+        this.scheduleController.setCapacityController(this.capacityCheckController);
+        
         // NoteController
         this.noteController = new NoteController(this.storageService, this.scheduleController);
         

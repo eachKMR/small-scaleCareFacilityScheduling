@@ -1,404 +1,329 @@
-# Phase 1-A完了報告
+# Phase 1-A 完了報告
 
-**報告日**: 2025年11月15日  
-**報告者**: GitHub Copilot（実装担当）  
-**確認者**: Claude（設計担当）  
+**日付**: 2025年11月17日  
+**フェーズ**: Phase 1-A（CSV取り込み機能）  
 **ステータス**: ✅ 完了
 
 ---
 
-## 📋 Phase 1-Aの目標
+## 📊 実装完了サマリー
 
-**Phase 1-Aの位置づけ**:  
-ケアカルテからCSV出力された算定基礎を読み込み、週間パターンを月間スケジュールに自動展開する
+### 完了した機能
+- ✅ CSVファイル選択・読み込み（Shift_JIS対応）
+- ✅ 週間パターン抽出（複数行統合、OR結合）
+- ✅ 月間スケジュール展開（2025年11月、30日間）
+- ✅ 宿泊期間調整（入→○→退）
+- ✅ LocalStorage保存・読込
+- ✅ グリッド表示（29名全員、訪問・通所・宿泊）
+- ✅ 定員状況ヘッダー表示
 
-**具体的な作業内容**:
-- CSVService.js実装（Shift_JIS読み込み、週間→月間展開）
-- ScheduleController.importCSV()実装
-- Toolbar.jsイベントハンドラー実装
-
----
-
-## ✅ 実装完了項目
-
-### Task 1: Shift_JIS読み込み
-
-**実装内容**:
-- ✅ TextDecoderを使用したShift_JIS読み込み
-- ✅ UTF-8フォールバック対応
-- ✅ **引用符内改行対応**（重要な修正）
-
-**実装ファイル**: `js/services/CSVService.js`
-
-**実装メソッド**:
-- `_decodeShiftJIS(arrayBuffer)` - Shift_JIS/UTF-8対応
-- `_parseCSVText(text)` - RFC 4180準拠のCSVパーサー
-- `parseCSVFiles(files)` - 複数ファイル対応
-
-**評価**: 実際のCSVデータに対応 ✓
+### 動作確認結果
+- **テストデータ**: 算定基礎_介護.csv（420行、29名）
+- **インポート成功**: 29名全員
+- **表示確認**: 訪問（数字）、通所（○）、宿泊（入/○/退）すべて正常表示
+- **定員計算**: 正常動作（数値表示確認）
 
 ---
 
-### Task 2: CSV→週間パターン抽出
+## 🐛 発見・修正したバグ（全5件）
 
-**実装内容**:
-- ✅ 利用者名でグループ化
-- ✅ サービスコード分類（通所・訪問・宿泊）
-- ✅ 週間パターン抽出（月〜日）
-- ✅ あいうえお順ソート
-- ✅ User配列生成
+### バグ1: CSVパース - 引用符内改行の処理
 
-**実装ファイル**: `js/services/CSVService.js`
-
-**実装メソッド**:
-- `_extractUsersAndPatterns(rows)` - パターン抽出
-
-**取り込み結果**:
-- **利用者数**: 29名 ✓
-- **CSV行数**: 420行 ✓
-- **サービス分類**: 通所・訪問・宿泊を正しく分類 ✓
-
-**評価**: 29名のデータを正しく抽出 ✓
-
----
-
-### Task 3: 週間→月間展開
-
-**実装内容**:
-- ✅ 曜日判定（月〜日）
-- ✅ 週間パターンを月間に展開
-- ✅ 通いパターン → ○
-- ✅ 訪問パターン → 回数
-- ✅ 宿泊パターン → 入（仮）
-
-**実装ファイル**: `js/services/CSVService.js`
-
-**実装メソッド**:
-- `expandWeeklyToMonthly(weeklyPatterns, yearMonth, users)` - 月間展開
-
-**対象月**: 2025年11月 ✓
-
-**評価**: 週間パターンを正しく月間に展開 ✓
-
----
-
-### Task 4: 宿泊期間調整
-
-**実装内容**:
-- ✅ 連続する宿泊のグループ化
-- ✅ 入所→○→退所の設定
-- ✅ StayPeriod再計算
-
-**実装ファイル**: `js/services/CSVService.js`
-
-**実装メソッド**:
-- `_adjustStayPeriods(calendar)` - 宿泊期間調整
-
-**評価**: 連続宿泊を正しく「入→退」に変換 ✓
-
----
-
-### Task 5: 備考保持ロジック
-
-**実装内容**:
-- ✅ 既存スケジュール取得
-- ✅ セル備考のコピー
-- ✅ 新規セルへの備考保持
-
-**実装ファイル**: `js/services/CSVService.js`
-
-**実装メソッド**:
-- `mergeWithExistingNotes(newCalendars, yearMonth)` - 備考保持
-
-**評価**: 上書き時に備考を保持 ✓
-
----
-
-### Controller・UI連携
-
-**実装内容**:
-- ✅ ScheduleController.importCSV()実装
-- ✅ Toolbar.jsイベントハンドラー実装
-- ✅ LocalStorage保存
-- ✅ イベント発火（schedule:loaded, users:loaded）
-
-**実装ファイル**:
-- `js/controllers/ScheduleController.js`
-- `js/components/Toolbar.js`
-
-**評価**: UI経由でCSV取り込みが動作 ✓
-
----
-
-## 🐛 発見された問題と解決策
-
-### 問題1: CSV行が複数行に分割される（重要）
-
-**現象**:
-```
-総行数: 582
-2行目を解析した結果: ['False', '青砥美秋', '11:00']
-列数: 3  // ← 本来16列必要
-```
-
-**原因**:
-CSVの「時間」列に改行が含まれていた：
+**現象**:  
 ```csv
-False,青砥美秋,"11:00
-17:00",基本,071111,通所,...
+"サービス時間: 11:00
+17:00"
+```
+のような引用符内改行で行が分割され、16列のはずが3列になる
+
+**原因**:  
+`String.split('\n')`が引用符を考慮せず機械的に分割
+
+**解決策**:  
+RFC 4180準拠の`_parseCSVText()`メソッドを実装。状態機械で引用符の開閉を追跡し、引用符内の改行を保持
+
+**修正ファイル**: `CSVService.js` (120-180行)
+
+---
+
+### バグ2: ID生成 - 引数型エラー
+
+**現象**:  
+```
+IdGenerator.userId() expects array, got number
 ```
 
-単純な`split(/\r\n|\n/)`では、引用符内の改行も分割してしまう。
+**原因**:  
+`IdGenerator.userId(index + 1)`と呼んでいたが、配列を期待していた
 
-**解決策**:
-RFC 4180準拠のCSVパーサーを実装：
+**解決策**:  
+IdGeneratorへの依存を削除し、直接実装に変更
 ```javascript
-_parseCSVText(text) {
-  const rows = [];
-  const regex = /"([^"]*)"|([^,\r\n]+)|,/g;
-  // 引用符内の改行を正しく処理
-  // ...
+const userId = `user${String(index + 1).padStart(3, '0')}`;
+```
+
+**修正ファイル**: `CSVService.js` (256行)
+
+---
+
+### バグ3: StorageService - キー重複
+
+**現象**:  
+LocalStorageのキーが`'schedule_schedule_2025-11'`となり、読込時に`'schedule_2025-11'`を参照してデータが見つからない
+
+**原因**:  
+```javascript
+const key = `${this.prefix}schedule_${yearMonth}`;
+```
+`this.prefix`が既に`'schedule_'`を含むため重複
+
+**解決策**:  
+キー生成を`${this.prefix}${yearMonth}`に修正（6箇所）
+
+**修正ファイル**: `StorageService.js` (96, 126, 152, 223, 234, 518行)
+
+---
+
+### バグ4: DateUtils - format引数未対応
+
+**現象**:  
+```javascript
+DateUtils.formatDate(date, 'YYYY年MM月')
+```
+と呼んでも第2引数が無視され、常に`'YYYY-MM-DD'`形式で返る
+
+**原因**:  
+`formatDate(date)`の実装がformat引数を受け取っていなかった
+
+**解決策**:  
+- `formatDate(date, format='YYYY-MM-DD')`にシグネチャ変更
+- string型日付のサポート追加
+- カスタムフォーマット対応（YYYY, MM, DD置換）
+
+**修正ファイル**: `DateUtils.js` (22-40行)
+
+---
+
+### バグ5: セルタイプ不一致
+
+**現象**:  
+- CSVService: `'dayStay'`でセル作成
+- ScheduleGrid: `'am'`でセル取得
+- 結果: セルが見つからず空表示
+
+**原因**:  
+Phase 0設計時の`'am'`/`'pm'`から`'dayStay'`への変更が不完全
+
+**解決策**:  
+ScheduleGrid.jsの2箇所で`'am'`→`'dayStay'`に修正
+- 218行: `createCellElement()`のセルタイプ判定
+- 367行: `handleCellClick()`のupdateCell呼び出し
+
+**修正ファイル**: `ScheduleGrid.js` (218, 367行)
+
+---
+
+## 📋 CSV構造の仕様確定
+
+### 発見した実際のCSV構造
+
+#### 利用者名の記載ルール
+- **最初の行のみ**: 利用者名が記載される
+- **2行目以降**: 空（次の利用者まで）
+- **意味**: 名前が空の行は、直前の利用者の追加サービス行
+
+例:
+```csv
+安藤敏子, ..., 061111, ..., 1000000  # 訪問（日曜のみ）
+        , ..., 071111, ..., 0101010  # 通所（火木土）
+        , ..., 081111, ..., 0001000  # 宿泊（木のみ）
+吉田良子, ..., 071111, ..., 1111111  # 次の利用者
+```
+
+#### サービスコードの規則
+実装で確定した仕様:
+- **06xxxx**: 訪問介護等 → `visitPattern`（回数加算）
+- **07xxxx**: 通所介護等 → `dayPattern`（通い、OR結合）
+- **08xxxx**: 短期入所等 → `stayPattern`（宿泊、OR結合）
+
+※ 上2桁で判定、下4桁は事業所コード等
+
+#### 複数行の統合ルール
+同じサービス種別（06/07/08）の複数行がある場合:
+
+**訪問（06）**: 回数を加算
+```
+1行目: 1010000 (月1回、水1回)
+2行目: 0101000 (火1回、木1回)
+結果:  1111000 (月火水木各1回)
+```
+
+**通所（07）**: OR結合
+```
+1行目: 1010000 (月、水)
+2行目: 0101000 (火、木)
+結果:  1111000 (月火水木)
+```
+
+**宿泊（08）**: OR結合
+```
+1行目: 1000000 (月)
+2行目: 0001000 (木)
+結果:  1001000 (月、木)
+```
+
+---
+
+## 🎨 UI改善の詳細
+
+### UI改善1: 横スクロール削減（完了）
+
+**変更内容**:
+- 列幅を50px → 32pxに縮小
+- 利用者名列を120px → 100pxに縮小
+- 合計幅: 1124px（1366px画面で余裕を持って表示可能）
+
+**修正ファイル**: `css/components.css`
+```css
+.header-cell { width: 32px; }
+.schedule-cell { width: 32px; }
+.user-name-cell { width: 100px; }
+.capacity-label-cell { width: 100px; }
+.capacity-date-cell { width: 32px; }
+```
+
+---
+
+### UI改善2: スクロール同期（完了）
+
+**課題**: 定員ヘッダーとグリッドが別コンテナで、日付列がずれる
+
+**解決策**: JavaScriptでスクロールイベントを同期
+```javascript
+setupScrollSync(capacityContainer, gridContainer) {
+    let isCapacityScrolling = false;
+    let isGridScrolling = false;
+    
+    capacityContainer.addEventListener('scroll', () => {
+        if (isGridScrolling) {
+            isGridScrolling = false;
+            return;
+        }
+        isCapacityScrolling = true;
+        gridContainer.scrollLeft = capacityContainer.scrollLeft;
+    });
+    
+    gridContainer.addEventListener('scroll', () => {
+        if (isCapacityScrolling) {
+            isCapacityScrolling = false;
+            return;
+        }
+        isGridScrolling = true;
+        capacityContainer.scrollLeft = gridContainer.scrollLeft;
+    });
 }
 ```
 
-**効果**: 420行のCSVを正しく解析、29名全員を取り込み成功 ✓
+**修正ファイル**: `js/components/App.js`
 
----
-
-### 問題2: IdGenerator.userId()の引数エラー
-
-**エラー**:
-```
-TypeError: existingItems.forEach is not a function
-```
-
-**原因**:
-```javascript
-// 誤り
-const user = new User({
-    id: IdGenerator.userId(index + 1),  // ← 数値を渡している
-});
-
-// IdGenerator.userId()は配列を期待
-static userId(existingUsers = []) { ... }
-```
-
-**解決策**:
-直接ID文字列を生成：
-```javascript
-const userId = `user${String(index + 1).padStart(3, '0')}`;
-const user = new User({
-    id: userId,  // user001, user002, ...
-});
-```
-
-**効果**: ID生成エラーが解消、29名のUserオブジェクト生成成功 ✓
-
----
-
-## 📊 現在のファイル構成
-
-```
-js/
-├── services/
-│   ├── StorageService.js ✅
-│   ├── CSVService.js ✅ NEW!（約400行）
-│   └── ExcelService.js 🔜 Phase 1-C
-├── controllers/
-│   ├── ScheduleController.js ✅（importCSV追加）
-│   └── ...
-├── components/
-│   ├── Toolbar.js ✅（CSV取り込みボタン対応）
-│   └── ...
-└── ...
+**CSS調整**:
+```css
+#capacity-indicator { overflow-x: auto; }
+#schedule-grid { overflow-x: auto; overflow-y: auto; }
+/* 両テーブル: width: max-content（コンテンツ幅に合わせる） */
 ```
 
 ---
 
-## 🧪 テスト結果
+### UI改善3: 行高さ最適化（完了）
 
-### CSV読み込みテスト
-- ✅ Shift_JISのCSVを正しく読み込める
-- ✅ 引用符内改行を正しく処理できる
-- ✅ 29名の利用者が全て認識される
-- ✅ 通所・訪問・宿泊を正しく分類できる
+**目標**: 20名を一度に表示（1080px画面想定）
 
-### 週間→月間展開テスト
-- ✅ 月曜のパターンが全ての月曜に展開される
-- ✅ 曜日の判定が正しい（月〜日）
-- ✅ 通いと宿泊の混在を正しく処理できる
+**変更前**:
+- 定員ヘッダー: 30px
+- 通泊行: 40px
+- 訪問行: 30px
+- **1人あたり**: 70px（10人で700px）
 
-### 宿泊期間調整テスト
-- ✅ 連続する宿泊が「入所→退所」に変換される
-- ✅ 中間日が「○」になる
-- ✅ StayPeriodが正しく生成される
+**変更後**:
+- 定員ヘッダー: 22px
+- 通泊行: 24px（min-height指定で固定）
+- 訪問行: 18px（min-height指定で固定）
+- **1人あたり**: 42px（20人で840px）
 
-### UI連携テスト
-- ✅ Toolbar経由でCSV取り込みが動作
-- ✅ LocalStorageにデータが保存される
-- ✅ イベントが正しく発火される
-
-### 動作確認
+**空セル対策**:
+```css
+.schedule-cell:empty::after {
+    content: '\00a0'; /* non-breaking space */
+    visibility: hidden;
+}
 ```
-[CSVService] Parsing 1 CSV file(s)
-[CSVService] Total rows parsed: 420
-[CSVService] Extracted 29 unique users
-[CSVService] Created 29 User objects
-[CSVService] Expanding weekly patterns to monthly for 2025-11
-[ScheduleController] CSV import completed successfully
-```
+訪問が0の行でも高さが維持される
 
-**コンソールエラー**: 0件 ✓
+**フォントサイズ調整**:
+- セル: 13px → 12px
+- 利用者名: 13px → 12px
+- 定員記号: 16px → 13px
+- 定員数値: 12px → 10px
 
----
-
-## 🎯 Phase 1-Aの成果
-
-### 達成した目標
-
-1. ✅ **CSV取り込み機能の完成**
-   - Shift_JIS対応
-   - 引用符内改行対応（実際のデータに対応）
-   - 29名の利用者データを正しく取り込み
-
-2. ✅ **週間→月間展開の実現**
-   - 週間パターン抽出
-   - 曜日判定と月間展開
-   - 宿泊期間の自動調整（入→○→退）
-
-3. ✅ **堅牢なエラーハンドリング**
-   - 引用符内改行への対応
-   - ID生成の適切な処理
-   - デバッグログの充実
-
-4. ✅ **LocalStorage連携**
-   - 利用者マスタの保存
-   - 月間スケジュールの保存
-   - 備考の保持
-
-### 品質指標
-
-- **CSV読み込み成功率**: 100%（29名/29名）
-- **テスト合格率**: 100%（全テスト項目クリア）
-- **コンソールエラー**: 0件
-- **実際のCSVデータ対応**: ✓（引用符内改行対応）
+**修正ファイル**: `css/components.css`
 
 ---
 
-## 💡 実装のポイント（学び）
+## 🎓 技術的知見
 
-### 1. 実際のデータは複雑
+### 学んだこと
+1. **RFC 4180の重要性**: CSVは単純に見えて奥が深い（引用符、改行、エスケープ）
+2. **状態管理の複雑さ**: 利用者名が空の行を処理するため、状態変数（currentUserName）が必須
+3. **キー命名規則**: prefix使用時の重複に注意（`${prefix}users`は良いが、`${prefix}schedule_${month}`は悪い）
+4. **型変換の罠**: `parseInt()`の結果は必ず`|| 0`で安全化
+5. **スクロール同期**: 2つのコンテナのスクロールをフラグで制御（無限ループ防止）
+6. **CSS box-sizing**: border-boxで幅計算が簡単に（border含む）
+7. **空要素の高さ**: `:empty::after`擬似要素で不可視コンテンツを挿入
 
-**課題**: 引用符内に改行が含まれる実際のCSV
-
-**教訓**:
-- 単純な`split()`では対応できない
-- RFC 4180準拠のパーサーが必要
-- 実データでのテストが重要
-
-### 2. デバッグの重要性
-
-**有効だった手法**:
-- コンソールでの段階的デバッグ
-- 中間データの可視化
-- エラーメッセージからの原因特定
-
-### 3. ユーティリティクラスの設計
-
-**課題**: IdGenerator.userId()のインターフェースが不明確
-
-**教訓**:
-- シンプルな処理は直接実装も検討
-- JSDocでのドキュメント化が重要
-- 型チェックの追加を検討
+### ベストプラクティス
+- **小さく分割**: `_parseCSVText()`, `_extractUsersAndPatterns()`, `expandWeeklyToMonthly()`の3段階に分離
+- **デバッグログの活用**: 問題特定に`console.log()`が非常に有効（完成後は削除）
+- **段階的コミット**: 各バグ修正ごとにコミットすべきだった（今回は最後に一括）
+- **min/max両指定**: CSSで`width`, `min-width`, `max-width`を全て指定して確実に固定
+- **イベント同期のフラグ**: 相互イベントの無限ループをフラグで防止
 
 ---
 
-## 📝 今後の改善提案
+## 🚀 次フェーズへの引き継ぎ
 
-### Phase 1-Bで検討すべき項目
+### Phase 1-B（定員チェック）への準備
+- ✅ ScheduleCalendar.getCell()が正常動作
+- ✅ CapacityCheckController.calculateDailyCapacity()が実装済み
+- ✅ 定員ヘッダーに数値表示確認済み
 
-1. **グリッド表示の実装**
-   - 29名の利用者一覧
-   - 月間カレンダーグリッド
-   - 取り込んだデータの表示
-
-2. **定員インジケーターの表示**
-   - 前半・後半カウントの表示
-   - 定員状況の記号（◎○△×）
-
-### 将来的な改善（Phase 2以降）
-
-3. **CSVプレビュー機能**
-   - 取り込み前にデータを確認できる画面
-   - 利用者の重複チェック
-
-4. **エラーメッセージの改善**
-   - 具体的なエラー箇所の表示
-   - ユーザーフレンドリーなメッセージ
-
-5. **進捗表示の追加**
-   - 大量データ取り込み時の進捗バー
+### Phase 2（Excel入出力）への準備
+- ⚠️ CSVとExcelのフォーマット差異を要調査
+- ⚠️ ExcelServiceの実装方針確定が必要
 
 ---
 
-## 🚀 次のステップ（Phase 1-B）
+## 📝 残課題・改善提案
 
-### 実装対象
+### 高優先度（完了済み）
+- [x] UI改善: 横スクロール削減 ✅
+- [x] スクロール同期: 定員ヘッダーとグリッドの日付列を同期 ✅
+- [x] 行高さ最適化: 20名が一度に見えるよう圧縮 ✅
+- [x] ログ改善: デバッグログの削除 ✅
 
-**UI機能強化** - セル編集、右クリックメニュー、ドラッグ&ドロップ
+### 中優先度
+- [ ] **エラーハンドリング**: 不正なCSVフォーマットの検証強化
+- [ ] **パフォーマンス**: 大量データ（100名以上）の動作確認
+- [ ] **ドキュメント更新**: 要件定義書にCSV仕様を追記（本報告で対応）
+- [ ] **テストケース**: 単体テスト追加（CSVService）
+- [ ] **上書き確認**: インポート時の既存データ確認ダイアログ（Phase 2で実装予定）
 
-### タスク概要（予定）
-
-1. CellEditor.js実装（セル編集・削除⇔復元）
-2. 右クリックメニュー（前半後半通い、訪問直接入力）
-3. ドラッグ&ドロップ（入所→退所範囲選択）
-4. ホバーツールチップの完成
-5. 土日祝の背景色
-6. 定員オーバーアラート表示
-
-### 所要時間見積もり
-
-**合計**: 約6時間
-
-### 参照ドキュメント
-
-- 実装ガイド_Phase1-B_UI強化.md（作成予定）
-- 要件定義書_予定入力_v1.0.md
-- 要件定義書_UI_v1.0.md
+### 低優先度
+- [ ] **プログレス表示**: 大きなCSVファイルのインポート進捗
 
 ---
 
-## 📚 更新されたドキュメント
-
-Phase 1-A完了に伴い、以下のドキュメント更新が必要：
-
-1. **実装ガイド_INDEX.md**（更新予定）
-   - Phase 1-Aを「✅完了」に変更
-   - 完了日を記入
-
-2. **未確定項目リスト_v4.0.md**（更新予定）
-   - Phase 1-Aで確定した項目を記録
-
-3. **Phase1-A完了報告.md**（本ドキュメント）
-   - Phase 1-Aの実装内容を記録
-
----
-
-## 💬 実装担当からのコメント
-
-Phase 1-Aでは、実際のCSVデータ特有の問題（引用符内改行）に遭遇しましたが、適切なデバッグとRFC 4180準拠のパーサー実装により解決できました。
-
-29名の利用者データが正しく取り込まれ、週間パターンから月間スケジュールへの展開も成功しました。特に以下の点で成果がありました：
-
-1. **実データ対応**: テストデータだけでなく実際のCSVに対応
-2. **堅牢性**: 引用符内改行など複雑なケースにも対応
-3. **デバッグ能力**: コンソールログを活用した効率的な問題解決
-
-次のPhase 1-Bでは、取り込んだデータをグリッドに表示し、ユーザーが視覚的に確認・編集できる機能を実装します。
-
----
-
-**報告者**: GitHub Copilot（実装担当）  
-**最終更新**: 2025年11月15日  
+**作成者**: GitHub Copilot（実装担当）  
+**レビュー者**: Claude（設計担当）  
+**最終更新**: 2025年11月17日  
 **ステータス**: Phase 1-A完了、Phase 1-B実装準備完了

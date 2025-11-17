@@ -169,6 +169,28 @@ class DateUtils {
         const now = new Date();
         return this.formatYearMonth(now.getFullYear(), now.getMonth() + 1);
     }
+
+    /**
+     * 日付範囲を取得
+     * @param {string} startDate - 開始日（YYYY-MM-DD）
+     * @param {string} endDate - 終了日（YYYY-MM-DD）
+     * @returns {Array<string>} 日付配列（YYYY-MM-DD形式）
+     */
+    static getDateRange(startDate, endDate) {
+        const start = this.parseDate(startDate);
+        const end = this.parseDate(endDate);
+        
+        const dates = [];
+        const current = new Date(start);
+        
+        while (current <= end) {
+            const dateStr = this.formatDate(current, 'YYYY-MM-DD');
+            dates.push(dateStr);
+            current.setDate(current.getDate() + 1);
+        }
+        
+        return dates;
+    }
 }
 
 // グローバル変数として公開

@@ -104,6 +104,7 @@ class Validator {
             // 通い・泊まり行の検証
             const validSymbols = [
                 AppConfig.SYMBOLS.FULL_DAY,
+                AppConfig.SYMBOLS.STAY_MIDDLE,
                 AppConfig.SYMBOLS.MORNING,
                 AppConfig.SYMBOLS.AFTERNOON,
                 AppConfig.SYMBOLS.CHECK_IN,
@@ -125,8 +126,8 @@ class Validator {
             }
             
             const num = parseInt(value);
-            if (num < 0 || num > 10) {
-                return { valid: false, message: '訪問回数は0〜10の範囲で入力してください' };
+            if (num < 0 || num > 99) {
+                return { valid: false, message: '訪問回数は0〜99の範囲で入力してください' };
             }
             
             return { valid: true, message: '' };

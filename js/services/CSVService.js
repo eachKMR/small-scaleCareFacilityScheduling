@@ -413,17 +413,17 @@ class CSVService {
                 calendar.setCell(lastCell.date, 'dayStay', AppConfig.SYMBOLS.CHECK_OUT);
                 
             } else {
-                // 3日以上連続: 入所→○→...→退所
+                // 3日以上連続: 入所→◎→...→退所
                 const firstCell = group[0];
                 const lastCell = group[group.length - 1];
                 
                 // 開始日: 入
                 calendar.setCell(firstCell.date, 'dayStay', AppConfig.SYMBOLS.CHECK_IN);
                 
-                // 中間日: ○
+                // 中間日: ◎（連泊中）
                 for (let i = 1; i < group.length - 1; i++) {
                     const cell = group[i];
-                    calendar.setCell(cell.date, 'dayStay', AppConfig.SYMBOLS.FULL_DAY);
+                    calendar.setCell(cell.date, 'dayStay', AppConfig.SYMBOLS.STAY_MIDDLE);
                 }
                 
                 // 終了日: 退

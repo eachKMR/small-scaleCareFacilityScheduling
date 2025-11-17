@@ -22,10 +22,6 @@ class ScheduleCell {
             halfDayType: 'full'  // 'full' | 'morning' | 'afternoon'
         };
         
-        // 削除⇔復元機能
-        this.deletedValue = data.deletedValue || null;
-        this.deletedAt = data.deletedAt || null;
-        
         this.logger = new Logger('ScheduleCell');
     }
 
@@ -59,6 +55,14 @@ class ScheduleCell {
      */
     isFullDay() {
         return this.inputValue === AppConfig.SYMBOLS.FULL_DAY;
+    }
+
+    /**
+     * 連泊中判定（"◎"）
+     * @returns {boolean}
+     */
+    isStayMiddle() {
+        return this.inputValue === AppConfig.SYMBOLS.STAY_MIDDLE;
     }
 
     /**
@@ -158,6 +162,14 @@ class ScheduleCell {
                     visit: 0,
                     halfDayType: 'full'
                 };
+            } else if (this.isStayMiddle()) {
+                // 連泊中（◎）: 通い+泊り
+                this.actualFlags = {
+                    day: true,
+                    stay: true,
+                    visit: 0,
+                    halfDayType: 'full'
+                };
             } else if (this.isMorning()) {
                 this.actualFlags = {
                     day: true,
@@ -226,6 +238,13 @@ class ScheduleCell {
                 afternoon: 1, 
                 stay: this.actualFlags.stay 
             };
+        } else if (this.isStayMiddle()) {
+            // 連泊中（◎）: 通い+泊り
+            return { 
+                morning: 1, 
+                afternoon: 1, 
+                stay: true 
+            };
         } else if (this.isMorning()) {
             return { 
                 morning: 1, 
@@ -249,58 +268,6 @@ class ScheduleCell {
     }
 
     /**
-     * セル値を削除（復元可能）
-     */
-    delete() {
-        if (this.isEmpty()) {
-            return;
-        }
-
-        this.deletedValue = this.inputValue;
-        this.deletedAt = Date.now();
-        this.inputValue = '';
-        this.calculateFlags();
-        
-        this.logger.debug(`Cell deleted: ${this.date} ${this.cellType}`);
-    }
-
-    /**
-     * セル値を復元
-     * @returns {boolean} 復元に成功した場合true
-     */
-    restore() {
-        if (!this.canRestore()) {
-            return false;
-        }
-
-        this.inputValue = this.deletedValue;
-        this.deletedValue = null;
-        this.deletedAt = null;
-        this.calculateFlags();
-        
-        this.logger.debug(`Cell restored: ${this.date} ${this.cellType}`);
-        return true;
-    }
-
-    /**
-     * 復元可能かどうか
-     * @returns {boolean}
-     */
-    canRestore() {
-        if (!this.deletedValue) {
-            return false;
-        }
-
-        // タイムアウトチェック
-        const timeout = AppConfig.STORAGE.RESTORE_TIMEOUT;
-        if (timeout > 0 && Date.now() - this.deletedAt > timeout) {
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
      * JSON形式に変換
      * @returns {object}
      */
@@ -311,9 +278,7 @@ class ScheduleCell {
             cellType: this.cellType,
             inputValue: this.inputValue,
             note: this.note,
-            actualFlags: this.actualFlags,
-            deletedValue: this.deletedValue,
-            deletedAt: this.deletedAt
+            actualFlags: this.actualFlags
         };
     }
 

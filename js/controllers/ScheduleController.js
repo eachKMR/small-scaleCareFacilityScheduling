@@ -313,7 +313,7 @@ class ScheduleController {
     // ==================== セル操作 ====================
 
     /**
-     * セル値を更新
+     * セル値を更新（Phase 1-B対応）
      * @param {string} userId - 利用者ID
      * @param {string} date - "YYYY-MM-DD"形式
      * @param {string} cellType - 'dayStay' | 'visit'
@@ -336,10 +336,16 @@ class ScheduleController {
                 return false;
             }
 
+            // フラグを再計算
+            calendar.calculateAllFlags();
+
             // 自動保存
             if (AppConfig.STORAGE.AUTO_SAVE) {
                 await this.saveSchedule();
             }
+
+            // 定員を再計算（同期的に実行）
+            this.recalculateCapacity();
 
             this.logger.debug(`Cell updated: ${userId}, ${date}, ${cellType} = ${value}`);
             this.eventEmitter.emit('cell:updated', { userId, date, cellType, value });
@@ -616,6 +622,135 @@ class ScheduleController {
             this.eventEmitter.emit('import:error', { error });
             throw error;
         }
+    }
+
+    // ==================== Phase 1-B: UI機能強化 ====================
+
+    /**
+     * 宿泊期間を設定（Phase 1-B）
+     * @param {string} userId - 利用者ID
+     * @param {string} startDate - 開始日（YYYY-MM-DD）
+     * @param {string} endDate - 終了日（YYYY-MM-DD）
+     * @returns {Promise<boolean>}
+     */
+    async setStayPeriod(userId, startDate, endDate) {
+        try {
+            const calendar = this.calendars.get(userId);
+            if (!calendar) {
+                this.logger.warn(`Calendar not found for user: ${userId}`);
+                return false;
+            }
+            
+            // 日付の順序を正規化
+            const [start, end] = [startDate, endDate].sort();
+            
+            // 期間内のセルを設定
+            const dates = DateUtils.getDateRange(start, end);
+            
+            dates.forEach((date, index) => {
+                if (index === 0) {
+                    // 初日: 入
+                    calendar.setCell(date, 'dayStay', AppConfig.SYMBOLS.CHECK_IN);
+                } else if (index === dates.length - 1) {
+                    // 最終日: 退
+                    calendar.setCell(date, 'dayStay', AppConfig.SYMBOLS.CHECK_OUT);
+                } else {
+                    // 中間: ◎（連泊中）
+                    calendar.setCell(date, 'dayStay', AppConfig.SYMBOLS.STAY_MIDDLE);
+                }
+            });
+            
+            // フラグを再計算
+            calendar.calculateAllFlags();
+
+            // 自動保存
+            if (AppConfig.STORAGE.AUTO_SAVE) {
+                await this.saveSchedule();
+            }
+
+            // 定員を再計算
+            this.recalculateCapacity();
+
+            // イベント発火
+            this.eventEmitter.emit('stayPeriodSet', { userId, startDate: start, endDate: end });
+            
+            this.logger.debug(`Stay period set: ${userId}, ${start} to ${end}`);
+            return true;
+            
+        } catch (error) {
+            this.logger.error('Failed to set stay period:', error);
+            return false;
+        }
+    }
+
+    /**
+     * 孤立した入・退を○に変換（Phase 1-B）
+     * StayPeriodに含まれない入・退記号を○に自動変換する
+     * @param {ScheduleCalendar} calendar - 対象カレンダー
+     */
+    cleanupOrphanedCheckouts(calendar) {
+        try {
+            // StayPeriodを再構築
+            calendar.calculateStayPeriods();
+            
+            // 全セルをチェック
+            for (const cell of calendar.cells.values()) {
+                if (cell.cellType === 'dayStay') {
+                    // 退記号をチェック
+                    if (cell.isStayEnd()) {
+                        const isValidCheckout = calendar.stayPeriods.some(period => 
+                            period.endDate === cell.date
+                        );
+                        
+                        // 孤立した退を○に変換
+                        if (!isValidCheckout) {
+                            cell.inputValue = AppConfig.SYMBOLS.FULL_DAY;
+                            calendar.calculateFlagsForDate(cell.date);
+                            this.logger.debug(`Converted orphaned checkout to full day: ${cell.date}`);
+                        }
+                    }
+                    
+                    // 入記号をチェック
+                    if (cell.isStayStart()) {
+                        const isValidCheckin = calendar.stayPeriods.some(period => 
+                            period.startDate === cell.date
+                        );
+                        
+                        // 孤立した入を○に変換
+                        if (!isValidCheckin) {
+                            cell.inputValue = AppConfig.SYMBOLS.FULL_DAY;
+                            calendar.calculateFlagsForDate(cell.date);
+                            this.logger.debug(`Converted orphaned checkin to full day: ${cell.date}`);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            this.logger.error('Failed to cleanup orphaned checkouts:', error);
+        }
+    }
+
+    /**
+     * 定員を再計算（Phase 1-B）
+     * CapacityCheckControllerを呼び出して定員を再計算
+     */
+    recalculateCapacity() {
+        // App.jsで設定されたcapacityControllerを呼び出す
+        if (this.capacityController) {
+            this.capacityController.updateCapacity();
+            this.logger.debug('Capacity recalculated');
+        } else {
+            this.logger.warn('CapacityController not set');
+        }
+    }
+
+    /**
+     * CapacityControllerを設定（Phase 1-B）
+     * App.jsから呼び出される
+     * @param {CapacityCheckController} capacityController
+     */
+    setCapacityController(capacityController) {
+        this.capacityController = capacityController;
     }
 }
 

@@ -305,14 +305,26 @@
   position: relative;
 }
 
-.cell-stay::before {
+/* 入所日（左側に青罫線） */
+.cell-check-in::before {
   content: '';
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
   width: 3px;
-  background-color: #0066cc; /* 青の左罫線 */
+  background-color: #0066cc;
+}
+
+/* 退所日（右側に青罫線） */
+.cell-check-out::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: #0066cc;
 }
 ```
 
