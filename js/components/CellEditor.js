@@ -6,6 +6,7 @@
  * - ○⇔空欄のトグル
  * - 訪問回数の循環
  * - 基本ドラッグ（入◎◎退）
+ * - フォーカス機能（1回目クリック→フォーカス、2回目クリック→操作実行）
  */
 class CellEditor {
     constructor(scheduleGrid, scheduleController) {
@@ -19,20 +20,82 @@ class CellEditor {
         this.dragEnd = null;
         this.hasMoved = false; // マウスが移動したかどうか
         
-        this.logger.info('CellEditor initialized (Phase 1)');
+        // フォーカス管理
+        this.focusedCell = null;  // { userId, date, cellType, element }
+        
+        this.logger.info('CellEditor initialized (Phase 1 with Focus)');
+    }
+    
+    // ========================================
+    // フォーカス管理
+    // ========================================
+    
+    /**
+     * セルにフォーカスを設定
+     * @param {string} userId - 利用者ID
+     * @param {string} date - 日付
+     * @param {string} cellType - セルタイプ
+     * @param {HTMLElement} element - セル要素
+     */
+    setFocus(userId, date, cellType, element) {
+        // 既存のフォーカスを解除
+        if (this.focusedCell && this.focusedCell.element) {
+            this.focusedCell.element.classList.remove('focused');
+        }
+        
+        // 新しいフォーカスを設定
+        this.focusedCell = { userId, date, cellType, element };
+        element.classList.add('focused');
+        element.focus();
+        
+        this.logger.debug(`Focus set: ${userId}, ${date}, ${cellType}`);
+    }
+    
+    /**
+     * フォーカスを解除
+     */
+    clearFocus() {
+        if (this.focusedCell && this.focusedCell.element) {
+            this.focusedCell.element.classList.remove('focused');
+            this.focusedCell = null;
+            this.logger.debug('Focus cleared');
+        }
+    }
+    
+    /**
+     * 指定セルがフォーカス中かどうか
+     * @param {string} userId - 利用者ID
+     * @param {string} date - 日付
+     * @param {string} cellType - セルタイプ
+     * @returns {boolean}
+     */
+    isFocused(userId, date, cellType) {
+        return this.focusedCell &&
+               this.focusedCell.userId === userId &&
+               this.focusedCell.date === date &&
+               this.focusedCell.cellType === cellType;
     }
 
     // ========================================
-    // Phase 1: 基本クリック操作
+    // Phase 1: 基本クリック操作（フォーカス対応版）
     // ========================================
 
     /**
      * 通泊セルのクリック（○⇔空欄のトグル）
+     * 1回目クリック: フォーカス、2回目クリック: 操作実行
      * Phase 2: 入・退・◎の処理を追加
      */
-    async handleDayStayClick(userId, date, currentValue) {
+    async handleDayStayClick(userId, date, currentValue, element) {
         this.logger.debug(`handleDayStayClick: ${date}, value: "${currentValue}"`);
         
+        // フォーカスチェック
+        if (!this.isFocused(userId, date, 'dayStay')) {
+            // 1回目クリック: フォーカス
+            this.setFocus(userId, date, 'dayStay', element);
+            return;
+        }
+        
+        // 2回目クリック: 操作実行
         if (currentValue === AppConfig.SYMBOLS.FULL_DAY) {
             // ○ → 空欄
             await this.controller.updateCell(userId, date, 'dayStay', '');
@@ -52,6 +115,9 @@ class CellEditor {
             // その他（◓◒など）
             this.logger.info(`Other symbol clicked: ${currentValue}`);
         }
+        
+        // 操作後にフォーカス維持
+        this.setFocus(userId, date, 'dayStay', element);
     }
 
     /**
@@ -261,15 +327,32 @@ class CellEditor {
         await this.controller.updateCell(userId, date, cellType, String(num));
     }
 
-    // ========================================
-    // Phase 1: 基本ドラッグ操作
-    // ========================================
-    async handleVisitClick(userId, date, currentValue) {
+    /**
+     * 訪問回数のクリック（0→1→2→3→0）
+     * 1回目クリック: フォーカス、2回目クリック: 操作実行
+     * @param {string} userId - 利用者ID
+     * @param {string} date - 日付
+     * @param {string} currentValue - 現在の値
+     * @param {HTMLElement} element - セル要素
+     * @returns {Promise<void>}
+     */
+    async handleVisitClick(userId, date, currentValue, element) {
+        // フォーカスチェック
+        if (!this.isFocused(userId, date, 'visit')) {
+            // 1回目クリック: フォーカス
+            this.setFocus(userId, date, 'visit', element);
+            return;
+        }
+        
+        // 2回目クリック: 操作実行
         const currentNum = parseInt(currentValue) || 0;
-        const newNum = (currentNum + 1) % 10;
+        const newNum = (currentNum + 1) % 4;  // 0→1→2→3→0
         const newValue = newNum === 0 ? '' : String(newNum);
         
         await this.controller.updateCell(userId, date, 'visit', newValue);
+        
+        // 操作後にフォーカス維持
+        this.setFocus(userId, date, 'visit', element);
     }
 
     // ========================================

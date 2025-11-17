@@ -426,27 +426,18 @@ class ScheduleGrid {
         
         // 現在の値を取得
         const cell = this.scheduleController.getCell(userId, date, cellType);
+        const currentValue = cell ? cell.inputValue : '';
         
-        // 削除状態の場合は復元
-        if (cell && cell.canRestore()) {
-            this.scheduleController.restoreCell(userId, date, cellType);
-            return;
-        }
-        
-        // 行タイプに応じて処理
+        // 行タイプに応じて処理（フォーカス対応）
         const row = td.closest('tr');
         const rowType = row.dataset.rowType;
         
         if (rowType === 'dayStay') {
-            // 通泊行: ○ ⇔ 空白のトグル
-            const currentValue = cell ? cell.inputValue : '';
-            const newValue = currentValue === AppConfig.SYMBOLS.FULL_DAY ? '' : AppConfig.SYMBOLS.FULL_DAY;
-            this.scheduleController.updateCell(userId, date, 'dayStay', newValue);
+            // 通泊行: CellEditorに処理を委譲（フォーカス対応）
+            this.cellEditor.handleDayStayClick(userId, date, currentValue, td);
         } else if (rowType === 'visit') {
-            // 訪問行: 回数+1（0→1→2→...→9→0）
-            const currentValue = cell ? (parseInt(cell.inputValue) || 0) : 0;
-            const newValue = currentValue >= 9 ? 0 : currentValue + 1;
-            this.scheduleController.updateCell(userId, date, cellType, newValue.toString());
+            // 訪問行: CellEditorに処理を委譲（フォーカス対応）
+            this.cellEditor.handleVisitClick(userId, date, currentValue, td);
         }
     }
 
