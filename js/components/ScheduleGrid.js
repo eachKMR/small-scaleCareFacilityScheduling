@@ -299,9 +299,9 @@ class ScheduleGrid {
             const currentValue = cellData ? cellData.inputValue : '';
             
             if (cellType === 'dayStay') {
-                await this.cellEditor.handleDayStayClick(userId, date, currentValue);
+                await this.cellEditor.handleDayStayClick(userId, date, currentValue, cell);
             } else if (cellType === 'visit') {
-                await this.cellEditor.handleVisitClick(userId, date, currentValue);
+                await this.cellEditor.handleVisitClick(userId, date, currentValue, cell);
             }
         });
         
