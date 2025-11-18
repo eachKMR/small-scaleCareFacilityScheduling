@@ -115,13 +115,12 @@ class CellEditor {
             }
         }
         
-        // 入・退・◎はクリック不可（フォーカスのみ許可）
+        // 入・退・◎はクリック不可（フォーカスもしない）
         if (currentValue === AppConfig.SYMBOLS.CHECK_IN ||
             currentValue === AppConfig.SYMBOLS.CHECK_OUT ||
             currentValue === AppConfig.SYMBOLS.STAY_MIDDLE) {
-            // フォーカスのみ設定
-            this.setFocus(userId, date, 'dayStay', element);
-            this.logger.debug(`Stay-related symbol clicked (focus only): ${currentValue}`);
+            // 何もしない
+            this.logger.debug(`Stay-related symbol clicked (no action): ${currentValue}`);
             return;
         }
         
@@ -276,6 +275,12 @@ class CellEditor {
                     await this.clearStayPeriod(userId, date);
                 });
                 
+                this.addMenuSeparator(menu);
+                
+                this.addMenuItem(menu, '備考', async () => {
+                    alert('備考機能はPhase2で実装予定です');
+                });
+                
             } else {
                 // 空欄または○の場合は通常メニュー
                 
@@ -302,6 +307,12 @@ class CellEditor {
                 this.addMenuItem(menu, 'クリア', async () => {
                     await this.controller.updateCell(userId, date, cellType, '');
                 });
+                
+                this.addMenuSeparator(menu);
+                
+                this.addMenuItem(menu, '備考', async () => {
+                    alert('備考機能はPhase2で実装予定です');
+                });
             }
             
         } else if (cellType === 'visit') {
@@ -318,6 +329,12 @@ class CellEditor {
             this.addMenuItem(menu, 'クリア', async () => {
                 await this.controller.updateCell(userId, date, cellType, '');
             });
+            
+            this.addMenuSeparator(menu);
+            
+            this.addMenuItem(menu, '備考', async () => {
+                alert('備考機能はPhase2で実装予定です');
+            });
         }
         
         return menu;
@@ -329,26 +346,45 @@ class CellEditor {
      * @param {string} date - 期間内のいずれかの日付
      */
     async clearStayPeriod(userId, date) {
+        this.logger.info(`clearStayPeriod called: userId=${userId}, date=${date}`);
+        
         const calendar = this.controller.getCalendar(userId);
-        if (!calendar) return;
+        if (!calendar) {
+            this.logger.warn('Calendar not found');
+            return;
+        }
         
         // この日付が属するStayPeriodを探す
+        // StayPeriodのstartDate/endDateはDateオブジェクトなので、文字列に変換して比較
         const period = calendar.stayPeriods.find(p => {
-            return date >= p.startDate && date <= p.endDate;
+            const startStr = DateUtils.formatDate(p.startDate, 'YYYY-MM-DD');
+            const endStr = DateUtils.formatDate(p.endDate, 'YYYY-MM-DD');
+            return date >= startStr && date <= endStr;
         });
         
         if (!period) {
             this.logger.warn(`StayPeriod not found for date: ${date}`);
+            this.logger.info(`Available periods: ${JSON.stringify(calendar.stayPeriods.map(p => ({
+                start: DateUtils.formatDate(p.startDate, 'YYYY-MM-DD'),
+                end: DateUtils.formatDate(p.endDate, 'YYYY-MM-DD')
+            })))}`);
             return;
         }
         
-        // 期間内の全セルを空欄にする
-        const periodDates = DateUtils.getDateRange(period.startDate, period.endDate);
+        const startStr = DateUtils.formatDate(period.startDate, 'YYYY-MM-DD');
+        const endStr = DateUtils.formatDate(period.endDate, 'YYYY-MM-DD');
+        this.logger.info(`Found period: ${startStr} -> ${endStr}`);
+        
+        // 期間内の全セルを空欄にする（文字列で渡す）
+        const periodDates = DateUtils.getDateRange(startStr, endStr);
+        this.logger.info(`Clearing ${periodDates.length} cells`);
+        
         for (const d of periodDates) {
-            await this.controller.updateCell(userId, d, 'dayStay', '');
+            const result = await this.controller.updateCell(userId, d, 'dayStay', '');
+            this.logger.debug(`Cleared cell ${d}: ${result ? 'success' : 'failed'}`);
         }
         
-        this.logger.info(`StayPeriod cleared: ${period.startDate} -> ${period.endDate}`);
+        this.logger.info(`StayPeriod cleared: ${startStr} -> ${endStr}`);
     }
 
     /**
@@ -411,6 +447,12 @@ class CellEditor {
      * @returns {Promise<void>}
      */
     async handleVisitClick(userId, date, currentValue, element) {
+        // 待機状態の場合はエラー
+        if (this.waitingForCheckOut) {
+            await this.handleDayStayCellClickForStayPeriod(userId, date, 'visit');
+            return;
+        }
+        
         // 先にフォーカスを設定
         this.setFocus(userId, date, 'visit', element);
         

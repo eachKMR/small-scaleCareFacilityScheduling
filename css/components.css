@@ -315,6 +315,7 @@
 .cell-stay {
     background-color: #e8f4f8; /* 薄青背景 */
     position: relative;
+    cursor: default; /* 入・◎・退はクリック不可 */
 }
 
 /* 入所日の左側に青い太罫線 */
@@ -464,4 +465,88 @@
     outline-offset: -2px;
     box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.2);
     z-index: 10;
+}
+
+/* ==================== Phase 1-B: 2ステップクリック方式 ==================== */
+
+/* 入所日待機中（点滅アニメーション） */
+.schedule-cell.waiting-for-checkout {
+    outline: 2px solid #0066cc;
+    outline-offset: -2px;
+    box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.4);
+    z-index: 10;
+    animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+    0%, 100% {
+        box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+    }
+}
+
+/* アニメーション無効化（アクセシビリティ） */
+@media (prefers-reduced-motion: reduce) {
+    .schedule-cell.waiting-for-checkout {
+        animation: none;
+    }
+    
+    .cell-stay {
+        transition: none;
+    }
+}
+
+/* ステータスバー表示 */
+.status-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 0;
+    padding: 0;
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    padding-left: 0;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.status-bar.show {
+    height: 32px;
+    padding: 0 16px;
+}
+
+.status-bar-info {
+    background: #0066cc;
+}
+
+.status-bar-error {
+    background: #d32f2f;
+}
+
+.status-bar-success {
+    background: #28a745;
+}
+
+/* 期間作成時のフェードイン */
+.cell-stay.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        background-color: rgba(232, 244, 248, 0);
+    }
+    to {
+        opacity: 1;
+        background-color: #e8f4f8;
+    }
 }
