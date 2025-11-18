@@ -1,12 +1,14 @@
 /**
  * CellEditorクラス（セル編集）
- * Phase 1-B: UI機能強化（リセット版）
+ * Phase 1-B: 2ステップクリック方式
  * 
- * Phase 1: 基本機能のみ
+ * 主要機能:
  * - ○⇔空欄のトグル
- * - 訪問回数の循環
- * - 基本ドラッグ（入◎◎退）
- * - フォーカス機能（1回目クリック→フォーカス、2回目クリック→操作実行）
+ * - 訪問回数の循環（0→1→2→3→0）
+ * - 2ステップクリック方式による宿泊期間作成
+ * - フォーカス機能
+ * - 右クリックメニュー
+ * - ステータスバー表示
  */
 class CellEditor {
     constructor(scheduleGrid, scheduleController) {
@@ -14,16 +16,31 @@ class CellEditor {
         this.controller = scheduleController;
         this.logger = new Logger('CellEditor');
         
-        // ドラッグ状態
-        this.isDragging = false;
-        this.dragStart = null;
-        this.dragEnd = null;
-        this.hasMoved = false; // マウスが移動したかどうか
-        
         // フォーカス管理
         this.focusedCell = null;  // { userId, date, cellType, element }
         
-        this.logger.info('CellEditor initialized (Phase 1 with Focus)');
+        // 2ステップクリック状態管理
+        this.waitingForCheckOut = false;  // 退所日待ち状態
+        this.checkInCell = null;  // { userId, date, element }
+        
+        // ステータスバー要素
+        this.statusBar = null;
+        this.statusBarTimer = null;
+        
+        // ステータスバーを作成
+        this.createStatusBar();
+        
+        this.logger.info('CellEditor initialized (Phase 1-B: 2-step click)');
+    }
+    
+    /**
+     * ステータスバーを作成
+     */
+    createStatusBar() {
+        this.statusBar = document.createElement('div');
+        this.statusBar.id = 'status-bar';
+        this.statusBar.className = 'status-bar';
+        document.body.appendChild(this.statusBar);
     }
     
     // ========================================
@@ -77,35 +94,46 @@ class CellEditor {
     }
 
     // ========================================
-    // Phase 1: 基本クリック操作（フォーカス対応版）
+    // Phase 1-B: 基本クリック操作（2ステップ対応）
     // ========================================
 
     /**
-     * 通泊セルのクリック（○⇔空欄のトグル）
-     * 1回のクリックでフォーカス+値変更を同時に実行
-     * Phase 2: 入・退・◎の処理を追加
+     * 通泊セルのクリック（○⇔空欄のトグル + 2ステップクリック対応）
+     * @param {string} userId - 利用者ID
+     * @param {string} date - 日付
+     * @param {string} currentValue - 現在の値
+     * @param {HTMLElement} element - セル要素
      */
     async handleDayStayClick(userId, date, currentValue, element) {
         this.logger.debug(`handleDayStayClick: ${date}, value: "${currentValue}"`);
         
+        // 2ステップクリック待機中の場合
+        if (this.waitingForCheckOut) {
+            const consumed = await this.handleDayStayCellClickForStayPeriod(userId, date, 'dayStay');
+            if (consumed) {
+                return;  // イベントを消費
+            }
+        }
+        
+        // 入・退・◎はクリック不可（フォーカスのみ許可）
+        if (currentValue === AppConfig.SYMBOLS.CHECK_IN ||
+            currentValue === AppConfig.SYMBOLS.CHECK_OUT ||
+            currentValue === AppConfig.SYMBOLS.STAY_MIDDLE) {
+            // フォーカスのみ設定
+            this.setFocus(userId, date, 'dayStay', element);
+            this.logger.debug(`Stay-related symbol clicked (focus only): ${currentValue}`);
+            return;
+        }
+        
         // 先にフォーカスを設定
         this.setFocus(userId, date, 'dayStay', element);
         
-        // 値の更新処理
+        // 値の更新処理（○⇔空欄のみ）
         if (currentValue === AppConfig.SYMBOLS.FULL_DAY) {
             // ○ → 空欄
             await this.controller.updateCell(userId, date, 'dayStay', '');
         } else if (currentValue === '' || !currentValue) {
             // 空欄 → ○
-            await this.controller.updateCell(userId, date, 'dayStay', AppConfig.SYMBOLS.FULL_DAY);
-        } else if (currentValue === AppConfig.SYMBOLS.CHECK_IN) {
-            // 入 → StayPeriodを削除（Phase 2）
-            await this.handleCheckInClick(userId, date);
-        } else if (currentValue === AppConfig.SYMBOLS.CHECK_OUT) {
-            // 退 → StayPeriodを削除（Phase 2）
-            await this.handleCheckOutClick(userId, date);
-        } else if (currentValue === AppConfig.SYMBOLS.STAY_MIDDLE) {
-            // ◎ → ○（通いのみに変換）（Phase 2）
             await this.controller.updateCell(userId, date, 'dayStay', AppConfig.SYMBOLS.FULL_DAY);
         } else {
             // その他（◓◒など）
@@ -212,8 +240,8 @@ class CellEditor {
         // 既存のメニューを削除
         this.hideContextMenu();
         
-        // メニューを生成
-        const menu = this.createContextMenu(userId, date, cellType, currentValue);
+        // メニューを生成（eventを渡す）
+        const menu = this.createContextMenu(event, userId, date, cellType, currentValue);
         
         // 位置を設定
         menu.style.left = `${event.pageX}px`;
@@ -231,29 +259,54 @@ class CellEditor {
     /**
      * メニューを生成
      */
-    createContextMenu(userId, date, cellType, currentValue) {
+    createContextMenu(event, userId, date, cellType, currentValue) {
         const menu = document.createElement('div');
         menu.className = 'context-menu';
         menu.id = 'cell-context-menu';
         
         if (cellType === 'dayStay') {
             // 通泊行のメニュー
-            this.addMenuItem(menu, '通い全日（○）', async () => {
-                await this.controller.updateCell(userId, date, cellType, AppConfig.SYMBOLS.FULL_DAY);
-            });
-            this.addMenuItem(menu, '前半のみ（◓）', async () => {
-                await this.controller.updateCell(userId, date, cellType, AppConfig.SYMBOLS.MORNING);
-            });
-            this.addMenuItem(menu, '後半のみ（◒）', async () => {
-                await this.controller.updateCell(userId, date, cellType, AppConfig.SYMBOLS.AFTERNOON);
-            });
-            this.addMenuSeparator(menu);
-            this.addMenuItem(menu, 'クリア', async () => {
-                await this.controller.updateCell(userId, date, cellType, '');
-            });
+            
+            // 宿泊期間中（入・◎・退）の場合は「クリア」のみ
+            if (currentValue === AppConfig.SYMBOLS.CHECK_IN ||
+                currentValue === AppConfig.SYMBOLS.STAY_MIDDLE ||
+                currentValue === AppConfig.SYMBOLS.CHECK_OUT) {
+                
+                this.addMenuItem(menu, 'クリア（期間全体を削除）', async () => {
+                    await this.clearStayPeriod(userId, date);
+                });
+                
+            } else {
+                // 空欄または○の場合は通常メニュー
+                
+                // 「泊り」メニュー（2ステップクリック開始）
+                const cellElement = event.target.closest('.schedule-cell');
+                this.addMenuItem(menu, '泊り（宿泊期間作成）', async () => {
+                    await this.startStayPeriod(userId, date, cellElement);
+                });
+                
+                this.addMenuSeparator(menu);
+                
+                this.addMenuItem(menu, '通い全日（○）', async () => {
+                    await this.controller.updateCell(userId, date, cellType, AppConfig.SYMBOLS.FULL_DAY);
+                });
+                this.addMenuItem(menu, '前半のみ（◓）', async () => {
+                    await this.controller.updateCell(userId, date, cellType, AppConfig.SYMBOLS.MORNING);
+                });
+                this.addMenuItem(menu, '後半のみ（◒）', async () => {
+                    await this.controller.updateCell(userId, date, cellType, AppConfig.SYMBOLS.AFTERNOON);
+                });
+                
+                this.addMenuSeparator(menu);
+                
+                this.addMenuItem(menu, 'クリア', async () => {
+                    await this.controller.updateCell(userId, date, cellType, '');
+                });
+            }
+            
         } else if (cellType === 'visit') {
             // 訪問行のメニュー
-            for (let i = 1; i <= 5; i++) {
+            for (let i = 1; i <= 3; i++) {  // 3回まで
                 this.addMenuItem(menu, `${i}回`, async () => {
                     await this.controller.updateCell(userId, date, cellType, String(i));
                 });
@@ -268,6 +321,34 @@ class CellEditor {
         }
         
         return menu;
+    }
+    
+    /**
+     * 宿泊期間全体を削除
+     * @param {string} userId - 利用者ID
+     * @param {string} date - 期間内のいずれかの日付
+     */
+    async clearStayPeriod(userId, date) {
+        const calendar = this.controller.getCalendar(userId);
+        if (!calendar) return;
+        
+        // この日付が属するStayPeriodを探す
+        const period = calendar.stayPeriods.find(p => {
+            return date >= p.startDate && date <= p.endDate;
+        });
+        
+        if (!period) {
+            this.logger.warn(`StayPeriod not found for date: ${date}`);
+            return;
+        }
+        
+        // 期間内の全セルを空欄にする
+        const periodDates = DateUtils.getDateRange(period.startDate, period.endDate);
+        for (const d of periodDates) {
+            await this.controller.updateCell(userId, d, 'dayStay', '');
+        }
+        
+        this.logger.info(`StayPeriod cleared: ${period.startDate} -> ${period.endDate}`);
     }
 
     /**
@@ -342,129 +423,195 @@ class CellEditor {
     }
 
     // ========================================
-    // Phase 1: 基本ドラッグ操作
+    // 2ステップクリック方式（宿泊期間作成）
     // ========================================
 
     /**
-     * ドラッグ開始
+     * 宿泊期間作成を開始（ステップ1: 入所日設定）
+     * 右クリックメニューから「泊り」を選択した時に呼ばれる
+     * @param {string} userId - 利用者ID
+     * @param {string} date - 入所日
+     * @param {HTMLElement} element - セル要素
      */
-    handleDragStart(userId, date, cellType) {
-        if (cellType !== 'dayStay') return;
-        
-        this.isDragging = true;
-        this.hasMoved = false; // リセット
-        this.dragStart = { userId, date };
-        this.dragEnd = { userId, date };
-        
-        this.logger.debug(`Drag start: ${date}`);
-    }
-
-    /**
-     * ドラッグ移動
-     */
-    handleDragMove(userId, date, cellType) {
-        if (!this.isDragging) return;
-        if (cellType !== 'dayStay') return;
-        if (userId !== this.dragStart.userId) return;
-        
-        // 移動したことを記録
-        if (date !== this.dragStart.date) {
-            this.hasMoved = true;
+    async startStayPeriod(userId, date, element) {
+        // 既存の待機状態をキャンセル
+        if (this.waitingForCheckOut) {
+            await this.cancelStayPeriod();
         }
         
-        this.dragEnd = { userId, date };
+        // 入所日を設定
+        await this.controller.updateCell(userId, date, 'dayStay', AppConfig.SYMBOLS.CHECK_IN);
         
-        this.logger.debug(`Dragging: ${this.dragStart.date} -> ${this.dragEnd.date}`);
+        // 待機状態に入る
+        this.waitingForCheckOut = true;
+        this.checkInCell = { userId, date, element };
+        
+        // セルに点滅アニメーションを追加
+        element.classList.add('waiting-for-checkout');
+        
+        // ステータスバーを表示
+        this.showStatusMessage('退所日を選択してください (Escでキャンセル)', 'info');
+        
+        // Escキーでキャンセル
+        document.addEventListener('keydown', this.handleEscapeKey.bind(this), { once: true });
+        
+        this.logger.info(`Stay period started: ${date}`);
     }
-
+    
     /**
-     * ドラッグ終了
+     * 宿泊期間作成を完了（ステップ2: 退所日設定）
+     * @param {string} userId - 利用者ID
+     * @param {string} checkOutDate - 退所日
+     * @returns {Promise<boolean>} 成功した場合true
      */
-    async handleDragEnd() {
-        if (!this.isDragging) return;
+    async completeStayPeriod(userId, checkOutDate) {
+        if (!this.waitingForCheckOut || !this.checkInCell) {
+            return false;
+        }
         
-        this.isDragging = false;
+        const checkInDate = this.checkInCell.date;
+        const checkInUserId = this.checkInCell.userId;
         
-        this.logger.debug(`Drag end: ${this.dragStart.date} -> ${this.dragEnd.date}, hasMoved: ${this.hasMoved}`);
+        // バリデーション
+        if (userId !== checkInUserId) {
+            this.showStatusMessage('同じ利用者のセルを選択してください', 'error');
+            return false;
+        }
         
-        // 移動していない場合は何もしない（クリックとして処理される）
-        if (!this.hasMoved) {
-            this.logger.debug('No movement detected, treating as click');
-            this.dragStart = null;
-            this.dragEnd = null;
-            this.hasMoved = false;
+        if (checkOutDate <= checkInDate) {
+            this.showStatusMessage('退所日は入所日より後の日付を選択してください', 'error');
+            return false;
+        }
+        
+        // 宿泊期間を設定
+        await this.controller.setStayPeriod(checkInUserId, checkInDate, checkOutDate);
+        
+        // 待機状態を解除
+        this.checkInCell.element.classList.remove('waiting-for-checkout');
+        this.waitingForCheckOut = false;
+        this.checkInCell = null;
+        
+        // ステータスバーを非表示
+        this.hideStatusMessage();
+        
+        this.logger.info(`Stay period completed: ${checkInDate} -> ${checkOutDate}`);
+        return true;
+    }
+    
+    /**
+     * 宿泊期間作成をキャンセル
+     */
+    async cancelStayPeriod() {
+        if (!this.waitingForCheckOut || !this.checkInCell) {
             return;
         }
         
-        // 宿泊期間を設定（Phase 1: シンプル版）
-        if (this.dragStart && this.dragEnd) {
-            await this.setStayPeriodSimple(
-                this.dragStart.userId,
-                this.dragStart.date,
-                this.dragEnd.date
-            );
-        }
+        // 入所日を空欄に戻す
+        await this.controller.updateCell(
+            this.checkInCell.userId,
+            this.checkInCell.date,
+            'dayStay',
+            ''
+        );
         
-        this.dragStart = null;
-        this.dragEnd = null;
-        this.hasMoved = false;
+        // アニメーションを削除
+        this.checkInCell.element.classList.remove('waiting-for-checkout');
+        
+        // 待機状態を解除
+        this.waitingForCheckOut = false;
+        this.checkInCell = null;
+        
+        // ステータスバーを非表示
+        this.hideStatusMessage();
+        
+        this.logger.info('Stay period cancelled');
     }
-
+    
     /**
-     * 宿泊期間設定（Phase 2: 延長・短縮対応）
+     * Escキーでキャンセル
+     * @param {KeyboardEvent} e - キーボードイベント
      */
-    async setStayPeriodSimple(userId, startDate, endDate) {
-        // 日付の順序を正規化
-        const dates = [startDate, endDate].sort();
-        const start = dates[0];
-        const end = dates[1];
-        
-        // 1セルのみの場合はクリック操作と同じ
-        if (start === end) {
-            const calendar = this.controller.getCalendar(userId);
-            const cell = calendar ? calendar.getCell(start, 'dayStay') : null;
-            const currentValue = cell ? cell.inputValue : '';
-            await this.handleDayStayClick(userId, start, currentValue);
-            return;
+    async handleEscapeKey(e) {
+        if (e.key === 'Escape') {
+            await this.cancelStayPeriod();
+        }
+    }
+    
+    /**
+     * 通泊行セルのクリック処理（待機状態を考慮）
+     * @param {string} userId - 利用者ID
+     * @param {string} date - 日付
+     * @param {string} cellType - セルタイプ
+     */
+    async handleDayStayCellClickForStayPeriod(userId, date, cellType) {
+        // 待機状態でない場合は何もしない
+        if (!this.waitingForCheckOut) {
+            return false;
         }
         
-        // Phase 2: 既存のStayPeriodとの重複をチェック
-        const calendar = this.controller.getCalendar(userId);
-        if (!calendar) return;
+        // 訪問行の場合はエラー
+        if (cellType !== 'dayStay') {
+            this.showStatusMessage('通泊行のセルを選択してください', 'error');
+            return true;  // イベントを消費
+        }
         
-        // 新しい期間と重複するStayPeriodを探す
-        const overlappingPeriods = calendar.stayPeriods.filter(period => {
-            // 期間の重複判定
-            return !(end < period.startDate || start > period.endDate);
-        });
+        // 退所日として設定
+        const success = await this.completeStayPeriod(userId, date);
+        return success;  // イベントを消費するかどうか
+    }
+    
+    // ========================================
+    // トースト表示
+    // ========================================
+    // ステータスバー表示
+    // ========================================
+    
+    /**
+     * ステータスバーにメッセージを表示
+     * @param {string} message - メッセージ
+     * @param {string} type - タイプ（'info' | 'error' | 'success'）
+     */
+    showStatusMessage(message, type = 'info') {
+        // 既存のタイマーをクリア
+        if (this.statusBarTimer) {
+            clearTimeout(this.statusBarTimer);
+            this.statusBarTimer = null;
+        }
         
-        if (overlappingPeriods.length > 0) {
-            // 重複がある場合：延長・短縮として処理
-            this.logger.debug(`Found ${overlappingPeriods.length} overlapping periods, treating as extension/shortening`);
-            
-            // 重複している全ての期間を削除
-            overlappingPeriods.forEach(period => {
-                const periodDates = DateUtils.getDateRange(period.startDate, period.endDate);
-                periodDates.forEach(d => {
-                    calendar.setCell(d, 'dayStay', '');
-                });
-                calendar.stayPeriods = calendar.stayPeriods.filter(p => p !== period);
-            });
-            
-            // 既存期間と新しい範囲を統合して、最も広い範囲を設定
-            const allDates = [start, end];
-            overlappingPeriods.forEach(period => {
-                allDates.push(period.startDate, period.endDate);
-            });
-            
-            const newStart = allDates.sort()[0];
-            const newEnd = allDates.sort()[allDates.length - 1];
-            
-            // 新しい期間を設定
-            await this.controller.setStayPeriod(userId, newStart, newEnd);
-        } else {
-            // 重複がない場合：新規作成
-            await this.controller.setStayPeriod(userId, start, end);
+        // アイコンを設定
+        const icon = type === 'error' ? '❌' : type === 'success' ? '✅' : '⏱️';
+        
+        // メッセージを表示
+        this.statusBar.textContent = `${icon} ${message}`;
+        this.statusBar.className = `status-bar status-bar-${type} show`;
+        
+        // エラーの場合は3秒後に通常のメッセージに戻す
+        if (type === 'error') {
+            this.statusBarTimer = setTimeout(() => {
+                // 待機状態の場合は通常のメッセージに戻す
+                if (this.waitingForCheckOut) {
+                    this.showStatusMessage('退所日を選択してください (Escでキャンセル)', 'info');
+                } else {
+                    this.hideStatusMessage();
+                }
+            }, 3000);
+        }
+        
+        this.logger.debug(`Status message shown: ${message} (${type})`);
+    }
+    
+    /**
+     * ステータスバーを非表示
+     */
+    hideStatusMessage() {
+        if (this.statusBar) {
+            this.statusBar.className = 'status-bar';
+            this.statusBar.textContent = '';
+        }
+        
+        if (this.statusBarTimer) {
+            clearTimeout(this.statusBarTimer);
+            this.statusBarTimer = null;
         }
     }
 }

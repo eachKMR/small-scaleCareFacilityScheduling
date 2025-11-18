@@ -22,11 +22,6 @@ class ScheduleGrid {
         // CellEditorを初期化
         this.cellEditor = new CellEditor(this, scheduleController);
         
-        // グローバルなmouseupイベントでドラッグ終了を検知
-        document.addEventListener('mouseup', async () => {
-            await this.cellEditor.handleDragEnd();
-        });
-        
         // イベントリスナー
         this.setupEventListeners();
     }
@@ -305,25 +300,12 @@ class ScheduleGrid {
             }
         });
         
-        // 右クリックイベント（Phase 3）
+        // 右クリックイベント
         cell.addEventListener('contextmenu', (e) => {
             // セルの実際の値を取得
             const cellData = this.scheduleController.getCell(userId, date, cellType);
             const currentValue = cellData ? cellData.inputValue : '';
             this.cellEditor.showContextMenu(e, userId, date, cellType, currentValue);
-        });
-        
-        // ドラッグイベント
-        cell.addEventListener('mousedown', (e) => {
-            this.cellEditor.handleDragStart(userId, date, cellType);
-        });
-        
-        cell.addEventListener('mouseenter', () => {
-            this.cellEditor.handleDragMove(userId, date, cellType);
-        });
-        
-        cell.addEventListener('mouseup', () => {
-            this.cellEditor.handleDragEnd();
         });
     }
 
