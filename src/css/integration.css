@@ -201,7 +201,7 @@
 
 .summary-label {
   background-color: #f5f5f5;
-  font-weight: bold;
+  font-weight: 600; /* bold → 600 */
   text-align: right;
   padding: 4px 8px; /* パディング縮小 */
   border: 1px solid #ddd;
@@ -225,12 +225,27 @@
 }
 
 .summary-cell.warning {
-  background-color: rgba(255, 255, 0, 0.2);
+  background-color: #fff3cd;
+  color: #856404;
+  font-weight: bold;
 }
 
 .summary-cell.full {
-  background-color: rgba(255, 0, 0, 0.2);
+  background-color: #f8d7da;
+  color: #721c24;
   font-weight: bold;
+}
+
+.summary-cell.over {
+  background-color: #f5c6cb;
+  color: #721c24;
+  font-weight: bold;
+  animation: pulse 1s ease infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 /* 介助量アイコン */
