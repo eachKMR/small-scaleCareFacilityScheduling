@@ -26,73 +26,76 @@ export class HoumonUI {
   render() {
     if (!this.container) return;
 
-    const html = `
-      <div class="houmon-section">
-        <div class="houmon-grid-container">
-          ${this.renderGrid()}
-        </div>
-      </div>
-    `;
+    const tbody = document.querySelector('#houmon-tbody');
+    if (!tbody) return;
 
-    this.container.innerHTML = html;
+    tbody.innerHTML = this.renderGrid();
     this.attachEventListeners();
   }
 
   /**
-   * グリッド描画
+   * グリッド描画（テーブル行を生成）
    */
   renderGrid() {
     const users = this.masterData.getAllUsers();
     const dates = this.generateDateRange(30);
 
-    let html = '<div class="houmon-grid">';
-    
-    // ヘッダー行（日付）
-    html += '<div class="houmon-header-row">';
-    html += '<div class="houmon-user-header">利用者</div>';
-    dates.forEach(date => {
-      const dateObj = new Date(date);
-      const day = dateObj.getDate();
-      const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
-      html += `<div class="houmon-date-header" data-date="${date}">
-        <div class="date-number">${day}</div>
-        <div class="date-day">${dayOfWeek}</div>
-      </div>`;
-    });
-    html += '</div>';
+    let html = '';
 
-    // 各利用者の行
+    // 各利用者の行を生成
     users.forEach(user => {
-      html += `<div class="houmon-user-row" data-user-id="${user.userId}">`;
-      html += `<div class="houmon-user-label">${user.name}</div>`;
+      html += '<tr class="houmon-user-row" data-user-id="' + user.userId + '">';
       
+      // 1列目: 利用者名
+      html += '<td class="user-cell">' + user.name + '</td>';
+      
+      // 2-31列目: 日付セル（横並び）
       dates.forEach(date => {
         const schedules = this.logic.getSchedulesForUserAndDate(user.userId, date);
-        const cellClass = schedules.length > 0 ? 'houmon-cell has-schedule' : 'houmon-cell empty';
+        const cellClass = schedules.length > 0 ? 'schedule-cell houmon-cell has-schedule' : 'schedule-cell houmon-cell empty';
         
-        html += `<div class="${cellClass}" 
-                      data-user-id="${user.userId}" 
-                      data-date="${date}">`;
+        html += '<td class="' + cellClass + '" ';
+        html += 'data-user-id="' + user.userId + '" ';
+        html += 'data-date="' + date + '">';
         
         if (schedules.length > 0) {
-          html += '<div class="cell-content">';
+          html += '<div class="visit-list">';
           schedules.forEach(schedule => {
             const displayText = schedule.getDisplayText();
-            html += `<div class="schedule-item" data-schedule-id="${schedule.id}">
-              ${displayText}
-            </div>`;
+            const timeClass = this.getTimeClass(schedule.timeMode);
+            html += '<span class="visit-item ' + timeClass + '" data-schedule-id="' + schedule.id + '">';
+            html += displayText;
+            html += '</span>';
           });
           html += '</div>';
+        } else {
+          html += '<span class="empty-text">-</span>';
         }
         
-        html += '</div>';
+        html += '</td>';
       });
       
-      html += '</div>';
+      html += '</tr>';
     });
 
-    html += '</div>';
     return html;
+  }
+
+  /**
+   * 時間帯に応じたCSSクラスを取得
+   * @param {string} timeMode
+   * @returns {string}
+   */
+  getTimeClass(timeMode) {
+    const classMap = {
+      'morning': 'morning',
+      'noon': 'daytime',
+      'afternoon': 'afternoon',
+      'evening': 'evening',
+      'night': 'night',
+      'custom': 'strict'
+    };
+    return classMap[timeMode] || 'anytime';
   }
 
   /**
@@ -130,10 +133,11 @@ export class HoumonUI {
    */
   attachEventListeners() {
     // セルクリック（新規追加）
-    this.container.querySelectorAll('.houmon-cell').forEach(cell => {
+    const cells = document.querySelectorAll('#houmon-tbody .schedule-cell');
+    cells.forEach(cell => {
       cell.addEventListener('click', (e) => {
         // スケジュールアイテムがクリックされた場合は何もしない
-        if (e.target.closest('.schedule-item')) return;
+        if (e.target.closest('.visit-item')) return;
 
         const userId = cell.dataset.userId;
         const date = cell.dataset.date;
@@ -142,7 +146,8 @@ export class HoumonUI {
     });
 
     // スケジュールアイテムクリック（詳細表示）
-    this.container.querySelectorAll('.schedule-item').forEach(item => {
+    const items = document.querySelectorAll('#houmon-tbody .visit-item');
+    items.forEach(item => {
       item.addEventListener('click', (e) => {
         e.stopPropagation();
         const scheduleId = item.dataset.scheduleId;

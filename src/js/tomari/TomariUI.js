@@ -27,71 +27,67 @@ export class TomariUI {
   render() {
     if (!this.container) return;
 
-    const html = `
-      <div class="tomari-section">
-        <div class="tomari-grid-container">
-          ${this.renderGrid()}
-        </div>
-      </div>
-    `;
+    const tbody = document.querySelector('#tomari-tbody');
+    if (!tbody) return;
 
-    this.container.innerHTML = html;
+    tbody.innerHTML = this.renderGrid();
     this.attachEventListeners();
   }
 
   /**
-   * グリッド描画
+   * グリッド描画（テーブル行を生成）
    */
   renderGrid() {
     const rooms = this.masterData.getRooms();
     const dates = this.generateDateRange(30);
 
-    let html = '<div class="tomari-grid">';
-    
-    // ヘッダー行（日付）
-    html += '<div class="tomari-header-row">';
-    html += '<div class="tomari-room-header">居室</div>';
-    dates.forEach(date => {
-      const dateObj = new Date(date);
-      const day = dateObj.getDate();
-      const dayOfWeek = ['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()];
-      html += `<div class="tomari-date-header" data-date="${date}">
-        <div class="date-number">${day}</div>
-        <div class="date-day">${dayOfWeek}</div>
-      </div>`;
-    });
-    html += '</div>';
+    let html = '';
 
-    // 各居室の行
+    // 各居室の行を生成
     rooms.forEach(room => {
-      html += `<div class="tomari-room-row" data-room-id="${room.roomId}">`;
-      html += `<div class="tomari-room-label">${room.name}</div>`;
+      html += '<tr class="tomari-room-row" data-room-id="' + room.roomId + '">';
       
+      // 1列目: 居室名
+      html += '<td class="room-cell">' + room.name + '</td>';
+      
+      // 2-31列目: 日付セル（横並び）
       dates.forEach(date => {
         const reservation = this.logic.getReservationForRoomAndDate(room.roomId, date);
         const status = reservation ? reservation.getStatusForDate(date) : 'empty';
-        const cellClass = `tomari-cell ${status}`;
+        let cellClass = 'schedule-cell tomari-cell';
         
-        html += `<div class="${cellClass}" 
-                      data-room-id="${room.roomId}" 
-                      data-date="${date}"
-                      data-reservation-id="${reservation ? reservation.id : ''}">`;
+        if (reservation) {
+          cellClass += ' occupied';
+          if (reservation.startDate === date) cellClass += ' check-in';
+          if (reservation.endDate === date) cellClass += ' check-out';
+        }
+        
+        html += '<td class="' + cellClass + '" ';
+        html += 'data-room-id="' + room.roomId + '" ';
+        html += 'data-date="' + date + '" ';
+        html += 'data-reservation-id="' + (reservation ? reservation.id : '') + '">';
         
         if (reservation) {
           const user = this.masterData.getUserById(reservation.userId);
           const userName = user ? user.name : '不明';
-          html += `<div class="cell-content">
-            <span class="user-name">${userName}</span>
-          </div>`;
+          
+          // 記号表示
+          let symbol = '○';
+          if (reservation.startDate === date) symbol = '入';
+          else if (reservation.endDate === date) symbol = '退';
+          
+          html += '<span class="symbol">' + symbol + '</span>';
+          html += '<span class="user-name">' + userName + '</span>';
+        } else {
+          html += '<span class="symbol empty">-</span>';
         }
         
-        html += '</div>';
+        html += '</td>';
       });
       
-      html += '</div>';
+      html += '</tr>';
     });
 
-    html += '</div>';
     return html;
   }
 
@@ -130,7 +126,8 @@ export class TomariUI {
    */
   attachEventListeners() {
     // セルクリック
-    this.container.querySelectorAll('.tomari-cell').forEach(cell => {
+    const cells = document.querySelectorAll('#tomari-tbody .schedule-cell');
+    cells.forEach(cell => {
       cell.addEventListener('click', (e) => {
         const roomId = cell.dataset.roomId;
         const date = cell.dataset.date;
