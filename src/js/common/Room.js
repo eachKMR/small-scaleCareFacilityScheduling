@@ -17,11 +17,13 @@ export class Room {
    * @param {Object} data
    * @param {string} data.roomId - "room1" 形式
    * @param {number} data.roomNumber - 居室番号 1-9
+   * @param {string} data.name - 居室名（任意、デフォルトは"居室X"）
    * @param {number} data.displayOrder - 表示順
    */
   constructor(data) {
     this.roomId = data.roomId;
     this.roomNumber = data.roomNumber;
+    this.name = data.name || `居室${data.roomNumber}`;
     this.displayOrder = data.displayOrder;
   }
 
@@ -50,6 +52,7 @@ export class Room {
     return {
       roomId: this.roomId,
       roomNumber: this.roomNumber,
+      name: this.name,
       displayOrder: this.displayOrder
     };
   }
@@ -74,6 +77,7 @@ export class Room {
       rooms.push(new Room({
         roomId: `room${i}`,
         roomNumber: i,
+        name: `居室${i}`,
         displayOrder: i
       }));
     }

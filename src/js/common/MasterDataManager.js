@@ -77,6 +77,15 @@ export class MasterDataManager {
   }
 
   /**
+   * 利用者をIDで取得（getUserのエイリアス）
+   * @param {string} userId
+   * @returns {User|null}
+   */
+  getUserById(userId) {
+    return this.getUser(userId);
+  }
+
+  /**
    * 利用者を追加
    * @param {User} user
    * @returns {boolean}
@@ -162,6 +171,15 @@ export class MasterDataManager {
   }
 
   /**
+   * スタッフをIDで取得（getStaffのエイリアス）
+   * @param {string} staffId
+   * @returns {Staff|null}
+   */
+  getStaffById(staffId) {
+    return this.getStaff(staffId);
+  }
+
+  /**
    * スタッフを追加
    * @param {Staff} staff
    * @returns {boolean}
@@ -194,6 +212,23 @@ export class MasterDataManager {
    */
   getAllRooms() {
     return [...this.rooms].sort((a, b) => a.displayOrder - b.displayOrder);
+  }
+
+  /**
+   * 全居室を取得（getAllRoomsのエイリアス）
+   * @returns {Room[]}
+   */
+  getRooms() {
+    return this.getAllRooms();
+  }
+
+  /**
+   * 居室をIDで取得（getRoomのエイリアス）
+   * @param {string} roomId
+   * @returns {Room|null}
+   */
+  getRoomById(roomId) {
+    return this.getRoom(roomId);
   }
 
   /**
