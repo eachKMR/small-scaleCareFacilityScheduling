@@ -30,8 +30,7 @@ export class DailySummaryGenerator {
         kayoiAfternoon: kayoiAfternoon,
         kayoiMax: Math.max(kayoiMorning, kayoiAfternoon), // 表示用：大きい方
         tomari: this.countTomari(tomariData, dateStr),
-        houmon: this.countHoumon(houmonData, dateStr),
-        careLevel: this.calculateCareLevel(tomariData, dateStr)
+        houmon: this.countHoumon(houmonData, dateStr)
       };
     }
     
@@ -81,45 +80,7 @@ export class DailySummaryGenerator {
   static countHoumon(houmonData, date) {
     if (!Array.isArray(houmonData)) return 0;
     
-    return houmonData.filter(visit => visit.date === date)
-      .reduce((sum, visit) => sum + visit.count, 0);
-  }
-  
-  /**
-   * 介助量を計算
-   * @param {Array} tomariData - 泊まりのデータ
-   * @param {string} date - 日付 (YYYY-MM-DD形式)
-   * @returns {Object} 介助量レベル別人数 {heavy, medium, light}
-   */
-  static calculateCareLevel(tomariData, date) {
-    if (!Array.isArray(tomariData)) {
-      return { heavy: 0, medium: 0, light: 0 };
-    }
-    
-    const staysOnDate = tomariData.filter(stay => {
-      return date >= stay.startDate && date <= stay.endDate;
-    });
-    
-    const careLevels = {
-      heavy: 0,
-      medium: 0,
-      light: 0
-    };
-    
-    staysOnDate.forEach(stay => {
-      if (!stay.user || typeof stay.user.careLevel !== 'number') return;
-      
-      const level = stay.user.careLevel;
-      if (level >= 4) {
-        careLevels.heavy++;
-      } else if (level >= 2) {
-        careLevels.medium++;
-      } else {
-        careLevels.light++;
-      }
-    });
-    
-    return careLevels;
+    return houmonData.filter(visit => visit.date === date).length;
   }
   
   /**
@@ -163,10 +124,6 @@ export class DailySummaryRenderer {
     // 訪問の行
     const houmonRow = this.createRow('訪問', summary, 'houmon', null);
     tableBody.appendChild(houmonRow);
-    
-    // 介助量の行
-    const careLevelRow = this.createCareLevelRow(summary);
-    tableBody.appendChild(careLevelRow);
   }
   
   /**
@@ -244,59 +201,6 @@ export class DailySummaryRenderer {
         } else {
           cell.classList.add('normal');
         }
-      }
-      
-      tr.appendChild(cell);
-    });
-    
-    return tr;
-  }
-  
-  /**
-   * 介助量の行を作成
-   * @param {Object} summary - 日別サマリーデータ
-   * @returns {HTMLTableRowElement} 行要素
-   */
-  static createCareLevelRow(summary) {
-    const tr = document.createElement('tr');
-    tr.className = 'summary-row care-level-row';
-    
-    // ラベルセル
-    const labelCell = document.createElement('td');
-    labelCell.className = 'summary-label';
-    labelCell.textContent = '介助量';
-    tr.appendChild(labelCell);
-    
-    // 日付ごとのセル
-    Object.entries(summary).forEach(([date, data]) => {
-      const cell = document.createElement('td');
-      cell.className = 'summary-cell';
-      cell.dataset.date = date;
-      
-      const careLevel = data.careLevel;
-      
-      // 重度
-      for (let i = 0; i < careLevel.heavy; i++) {
-        const icon = document.createElement('span');
-        icon.className = 'care-icon heavy';
-        icon.textContent = '●';
-        cell.appendChild(icon);
-      }
-      
-      // 中度
-      for (let i = 0; i < careLevel.medium; i++) {
-        const icon = document.createElement('span');
-        icon.className = 'care-icon medium';
-        icon.textContent = '●';
-        cell.appendChild(icon);
-      }
-      
-      // 軽度
-      for (let i = 0; i < careLevel.light; i++) {
-        const icon = document.createElement('span');
-        icon.className = 'care-icon light';
-        icon.textContent = '○';
-        cell.appendChild(icon);
       }
       
       tr.appendChild(cell);
