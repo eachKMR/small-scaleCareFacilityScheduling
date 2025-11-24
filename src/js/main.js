@@ -11,10 +11,10 @@ import { DateUtils } from './common/utils/DateUtils.js';
 import { CSVImportUI } from './settings/CSVImportUI.js';
 import { DailySummaryGenerator, DailySummaryRenderer, CalendarHeaderRenderer } from './common/DailySummary.js';
 import { TabJumpController, ColumnWidthCalculator } from './common/TabJump.js';
-import TomariLogic from './tomari/TomariLogic.js';
-import TomariUI from './tomari/TomariUI.js';
-import HoumonLogic from './houmon/HoumonLogic.js';
-import HoumonUI from './houmon/HoumonUI.js';
+import { TomariLogic } from './tomari/TomariLogic.js';
+import { TomariUI } from './tomari/TomariUI.js';
+import { HoumonLogic } from './houmon/HoumonLogic.js';
+import { HoumonUI } from './houmon/HoumonUI.js';
 
 class App {
   constructor() {

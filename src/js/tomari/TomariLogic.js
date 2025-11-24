@@ -2,10 +2,10 @@
  * 泊まり予約管理ロジック
  * 居室予約の追加・編集・削除、空き状況判定などを管理
  */
-import TomariReservation from './TomariReservation.js';
-import Room from '../common/Room.js';
+import { TomariReservation } from './TomariReservation.js';
+import { Room } from '../common/Room.js';
 
-class TomariLogic {
+export class TomariLogic {
   constructor(masterDataManager) {
     this.masterData = masterDataManager;
     this.reservations = []; // TomariReservation[]
@@ -218,5 +218,3 @@ class TomariLogic {
     this.saveToStorage();
   }
 }
-
-export default TomariLogic;

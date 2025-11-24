@@ -2,9 +2,9 @@
  * 訪問セクションUI
  * 利用者×30日のグリッド表示、訪問スケジュールの追加・編集・削除
  */
-import HoumonLogic from './HoumonLogic.js';
+import { HoumonLogic } from './HoumonLogic.js';
 
-class HoumonUI {
+export class HoumonUI {
   constructor(masterDataManager, houmonLogic) {
     this.masterData = masterDataManager;
     this.logic = houmonLogic;
@@ -348,5 +348,3 @@ class HoumonUI {
     this.render();
   }
 }
-
-export default HoumonUI;

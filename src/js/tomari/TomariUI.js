@@ -2,9 +2,9 @@
  * 泊まりセクションUI
  * 9居室×30日のグリッド表示、予約の追加・編集・削除
  */
-import TomariLogic from './TomariLogic.js';
+import { TomariLogic } from './TomariLogic.js';
 
-class TomariUI {
+export class TomariUI {
   constructor(masterDataManager, tomariLogic) {
     this.masterData = masterDataManager;
     this.logic = tomariLogic;
@@ -302,5 +302,3 @@ class TomariUI {
     this.render();
   }
 }
-
-export default TomariUI;

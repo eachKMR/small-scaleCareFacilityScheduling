@@ -2,9 +2,9 @@
  * 訪問スケジュール管理ロジック
  * 訪問予定の追加・編集・削除、制約チェックなどを管理
  */
-import HoumonSchedule from './HoumonSchedule.js';
+import { HoumonSchedule } from './HoumonSchedule.js';
 
-class HoumonLogic {
+export class HoumonLogic {
   constructor(masterDataManager) {
     this.masterData = masterDataManager;
     this.schedules = []; // HoumonSchedule[]
@@ -200,5 +200,3 @@ class HoumonLogic {
     return results;
   }
 }
-
-export default HoumonLogic;
