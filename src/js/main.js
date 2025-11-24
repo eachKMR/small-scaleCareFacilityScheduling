@@ -11,6 +11,10 @@ import { DateUtils } from './common/utils/DateUtils.js';
 import { CSVImportUI } from './settings/CSVImportUI.js';
 import { DailySummaryGenerator, DailySummaryRenderer, CalendarHeaderRenderer } from './common/DailySummary.js';
 import { TabJumpController, ColumnWidthCalculator } from './common/TabJump.js';
+import TomariLogic from './tomari/TomariLogic.js';
+import TomariUI from './tomari/TomariUI.js';
+import HoumonLogic from './houmon/HoumonLogic.js';
+import HoumonUI from './houmon/HoumonUI.js';
 
 class App {
   constructor() {
@@ -38,8 +42,20 @@ class App {
       // CSV取り込みUI初期化
       this.csvImportUI = new CSVImportUI(this.masterData);
 
-      // セクション初期化（Phase 1は通いのみ）
+      // セクション初期化
       this.sections.kayoi = new KayoiSection(this.masterData);
+      
+      // 泊まりセクション初期化
+      const tomariLogic = new TomariLogic(this.masterData);
+      tomariLogic.initialize();
+      this.sections.tomari = new TomariUI(this.masterData, tomariLogic);
+      this.sections.tomari.initialize(document.querySelector('#tomari-section .section-content'));
+      
+      // 訪問セクション初期化
+      const houmonLogic = new HoumonLogic(this.masterData);
+      houmonLogic.initialize();
+      this.sections.houmon = new HoumonUI(this.masterData, houmonLogic);
+      this.sections.houmon.initialize(document.querySelector('#houmon-section .section-content'));
 
       // UI初期化
       this.setupUI();
@@ -79,10 +95,11 @@ class App {
    * 日別サマリーを更新
    */
   updateDailySummary() {
-    // 現在は通いのみなので、泊まり・訪問は空データ
     const kayoiData = this.sections.kayoi ? this.sections.kayoi.getAllSchedules() : [];
-    const tomariData = [];
-    const houmonData = [];
+    const tomariData = this.sections.tomari && this.sections.tomari.logic ? 
+                       this.sections.tomari.logic.getAllReservations() : [];
+    const houmonData = this.sections.houmon && this.sections.houmon.logic ? 
+                       this.sections.houmon.logic.getAllSchedules() : [];
 
     const summary = DailySummaryGenerator.generate(
       kayoiData,
@@ -168,37 +185,43 @@ class App {
    * @param {string} sectionName - 'kayoi' | 'tomari' | 'houmon'
    */
   activateSection(sectionName) {
-    // Phase 1では通いのみ
-    if (sectionName !== 'kayoi') {
-      this.showToast(`${sectionName}セクションは開発中です`, 'info');
-      return;
-    }
-
     // 前のセクションを非アクティブ化
     if (this.activeSection && this.sections[this.activeSection]) {
-      this.sections[this.activeSection].deactivate();
+      if (this.sections[this.activeSection].deactivate) {
+        this.sections[this.activeSection].deactivate();
+      }
     }
 
     this.activeSection = sectionName;
 
     // タブUIの更新
-    document.querySelectorAll('.tab-btn').forEach(btn => {
+    document.querySelectorAll('.tab-button').forEach(btn => {
       btn.classList.remove('active');
-      if (btn.dataset.section === sectionName) {
+      const target = btn.dataset.target;
+      if (target === `${sectionName}-section` || (sectionName === 'kayoi' && target === 'kayoi-section')) {
         btn.classList.add('active');
       }
     });
 
-    // セクションコンテナの切り替え
-    document.querySelectorAll('.section-content').forEach(section => {
-      section.classList.remove('active');
+    // セクションコンテナの切り替え（全てのsectionを非表示にしてから対象を表示）
+    document.querySelectorAll('.section').forEach(section => {
+      section.style.display = 'none';
     });
-    document.getElementById(`${sectionName}-section`).classList.add('active');
+    const targetSection = document.getElementById(`${sectionName}-section`);
+    if (targetSection) {
+      targetSection.style.display = 'block';
+    }
 
     // セクションをアクティブ化
     if (this.sections[sectionName]) {
-      this.sections[sectionName].activate();
-      this.sections[sectionName].changeMonth(this.currentYearMonth);
+      if (this.sections[sectionName].activate) {
+        this.sections[sectionName].activate();
+      }
+      if (this.sections[sectionName].changeMonth) {
+        this.sections[sectionName].changeMonth(this.currentYearMonth);
+      } else if (this.sections[sectionName].refresh) {
+        this.sections[sectionName].refresh();
+      }
     }
   }
 
