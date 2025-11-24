@@ -1,0 +1,153 @@
+/* ==================== 泊まりセクション ==================== */
+
+.tomari-section {
+  margin-top: 20px;
+}
+
+.tomari-section .section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.capacity-label {
+  font-size: 14px;
+  color: #666;
+  font-weight: normal;
+  margin-left: 10px;
+}
+
+/* グリッドコンテナ */
+.tomari-grid-container {
+  overflow-x: auto;
+  margin-top: 10px;
+}
+
+#tomari-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* 居室ヘッダー */
+.room-header {
+  background-color: #e9ecef;
+  font-weight: bold;
+  text-align: center;
+  padding: 8px;
+  border: 1px solid #ddd;
+  min-width: 100px;
+  position: sticky;
+  left: 0;
+  z-index: 10;
+}
+
+/* 居室セル（縦軸） */
+.room-cell {
+  background-color: #f5f5f5;
+  font-weight: bold;
+  text-align: left;
+  padding: 8px;
+  border: 1px solid #ddd;
+  min-width: 100px;
+  position: sticky;
+  left: 0;
+  z-index: 5;
+}
+
+/* スケジュールセル */
+.tomari-grid-container .schedule-cell {
+  text-align: center;
+  padding: 4px;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  min-width: 60px;
+  height: 50px;
+  position: relative;
+  background-color: #fafafa;
+  vertical-align: middle;
+}
+
+.tomari-grid-container .schedule-cell:hover {
+  background-color: rgba(33, 150, 243, 0.1);
+}
+
+/* 予約あり（占有） */
+.tomari-grid-container .schedule-cell.occupied {
+  background-color: #e3f2fd;
+}
+
+/* 入所日（左側に青罫線） */
+.tomari-grid-container .schedule-cell.check-in {
+  border-left: 3px solid #2196f3;
+}
+
+/* 退所日（右側に青罫線） */
+.tomari-grid-container .schedule-cell.check-out {
+  border-right: 3px solid #2196f3;
+}
+
+/* 記号表示 */
+.tomari-grid-container .symbol {
+  font-size: 14px;
+  font-weight: bold;
+  display: block;
+  line-height: 1.2;
+}
+
+/* 利用者名表示 */
+.tomari-grid-container .user-name {
+  font-size: 11px;
+  color: #666;
+  display: block;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* 空室表示 */
+.tomari-grid-container .symbol.empty {
+  color: #ccc;
+  font-weight: normal;
+}
+
+/* 日付ヘッダー */
+.tomari-grid-container .date-header {
+  background-color: #e9ecef;
+  font-size: 12px;
+  text-align: center;
+  padding: 8px 4px;
+  border: 1px solid #ddd;
+  min-width: 60px;
+}
+
+.tomari-grid-container .date-header .count {
+  font-size: 11px;
+  color: #666;
+  display: block;
+  margin-top: 2px;
+}
+
+/* 定員警告 */
+.tomari-grid-container .date-header .count.warning {
+  color: #f57c00;
+  font-weight: bold;
+}
+
+.tomari-grid-container .date-header .count.full {
+  color: #d32f2f;
+  font-weight: bold;
+}
+
+.tomari-grid-container .date-header .count.over {
+  color: #d32f2f;
+  font-weight: bold;
+  animation: pulse 1s ease infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}

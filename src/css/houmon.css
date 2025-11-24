@@ -1,0 +1,133 @@
+/* ==================== 訪問セクション ==================== */
+
+.houmon-section {
+  margin-top: 20px;
+}
+
+/* グリッドコンテナ */
+.houmon-grid-container {
+  overflow-x: auto;
+  margin-top: 10px;
+}
+
+#houmon-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* 利用者ヘッダー */
+.user-header {
+  background-color: #e9ecef;
+  font-weight: bold;
+  text-align: center;
+  padding: 8px;
+  border: 1px solid #ddd;
+  min-width: 100px;
+  position: sticky;
+  left: 0;
+  z-index: 10;
+}
+
+/* 利用者セル（縦軸） */
+.user-cell {
+  background-color: #f5f5f5;
+  font-weight: bold;
+  text-align: left;
+  padding: 8px;
+  border: 1px solid #ddd;
+  min-width: 100px;
+  position: sticky;
+  left: 0;
+  z-index: 5;
+}
+
+/* スケジュールセル */
+.houmon-grid-container .schedule-cell {
+  text-align: center;
+  padding: 4px;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  min-width: 60px;
+  height: 50px;
+  background-color: #fafafa;
+  vertical-align: middle;
+}
+
+.houmon-grid-container .schedule-cell:hover {
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
+/* 訪問リスト */
+.visit-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 訪問アイテム（時間帯バッジ） */
+.visit-item {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* 時間帯別の色分け */
+.visit-item.morning {
+  background-color: #fff3e0;
+  color: #e65100;
+}
+
+.visit-item.daytime {
+  background-color: #fff9c4;
+  color: #f57f17;
+}
+
+.visit-item.afternoon {
+  background-color: #f1f8e9;
+  color: #558b2f;
+}
+
+.visit-item.evening {
+  background-color: #e1f5fe;
+  color: #01579b;
+}
+
+.visit-item.night {
+  background-color: #e8eaf6;
+  color: #283593;
+}
+
+/* 厳守時刻（赤） */
+.visit-item.strict {
+  background-color: #ffebee;
+  color: #c62828;
+  font-weight: bold;
+}
+
+/* 随時（グレー） */
+.visit-item.anytime {
+  background-color: #f5f5f5;
+  color: #666;
+}
+
+/* 空欄表示 */
+.houmon-grid-container .empty-text {
+  color: #ccc;
+  font-size: 14px;
+}
+
+/* 日付ヘッダー */
+.houmon-grid-container .date-header {
+  background-color: #e9ecef;
+  font-size: 12px;
+  text-align: center;
+  padding: 8px 4px;
+  border: 1px solid #ddd;
+  min-width: 60px;
+}

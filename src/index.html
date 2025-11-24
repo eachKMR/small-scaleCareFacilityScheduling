@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="css/common.css">
   <link rel="stylesheet" href="css/integration.css">
   <link rel="stylesheet" href="css/kayoi.css">
+  <link rel="stylesheet" href="css/tomari.css">
+  <link rel="stylesheet" href="css/houmon.css">
 </head>
 <body>
   <div id="app">
@@ -75,19 +77,43 @@
         </div>
       </section>
 
-      <!-- 泊まりセクション（未実装） -->
+      <!-- 泊まりセクション -->
       <section id="tomari-section" class="section tomari-section">
-        <h3 class="section-title">泊まり（ショートステイ）</h3>
+        <h3 class="section-title">泊まり（ショートステイ）<span class="capacity-label">定員: 9人/日</span></h3>
         <div class="section-content">
-          <p style="text-align: center; padding: 40px; color: #999;">Phase 1-3で実装予定</p>
+          <div class="tomari-grid-container">
+            <table id="tomari-grid" class="schedule-grid">
+              <thead>
+                <tr>
+                  <th class="room-header">居室</th>
+                  <!-- 日付ヘッダーはJavaScriptで生成 -->
+                </tr>
+              </thead>
+              <tbody id="tomari-tbody">
+                <!-- 居室行はJavaScriptで生成 -->
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
-      <!-- 訪問セクション（未実装） -->
+      <!-- 訪問セクション -->
       <section id="houmon-section" class="section houmon-section">
         <h3 class="section-title">訪問（訪問介護）</h3>
         <div class="section-content">
-          <p style="text-align: center; padding: 40px; color: #999;">Phase 1-4で実装予定</p>
+          <div class="houmon-grid-container">
+            <table id="houmon-grid" class="schedule-grid">
+              <thead>
+                <tr>
+                  <th class="user-header">利用者</th>
+                  <!-- 日付ヘッダーはJavaScriptで生成 -->
+                </tr>
+              </thead>
+              <tbody id="houmon-tbody">
+                <!-- 利用者行はJavaScriptで生成 -->
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     </main>
