@@ -1,0 +1,88 @@
+{
+  "schedules": [
+    {
+      "userId": "user001",
+      "date": "2024-11-25",
+      "section": "前半",
+      "symbol": "○",
+      "note": ""
+    },
+    {
+      "userId": "user001",
+      "date": "2024-11-26",
+      "section": "後半",
+      "symbol": "○",
+      "note": ""
+    },
+    {
+      "userId": "user002",
+      "date": "2024-11-25",
+      "section": "終日",
+      "symbol": "◓",
+      "note": "送迎あり"
+    },
+    {
+      "userId": "user003",
+      "date": "2024-11-25",
+      "section": "前半",
+      "symbol": "○",
+      "note": ""
+    },
+    {
+      "userId": "user003",
+      "date": "2024-11-27",
+      "section": "前半",
+      "symbol": "◒",
+      "note": ""
+    },
+    {
+      "userId": "user004",
+      "date": "2024-11-26",
+      "section": "前半",
+      "symbol": "○",
+      "note": ""
+    },
+    {
+      "userId": "user005",
+      "date": "2024-11-26",
+      "section": "後半",
+      "symbol": "◓",
+      "note": "送迎あり"
+    },
+    {
+      "userId": "user006",
+      "date": "2024-11-27",
+      "section": "終日",
+      "symbol": "○",
+      "note": ""
+    },
+    {
+      "userId": "user007",
+      "date": "2024-11-28",
+      "section": "前半",
+      "symbol": "○",
+      "note": ""
+    },
+    {
+      "userId": "user008",
+      "date": "2024-11-28",
+      "section": "後半",
+      "symbol": "◓",
+      "note": "送迎あり"
+    },
+    {
+      "userId": "user009",
+      "date": "2024-11-29",
+      "section": "前半",
+      "symbol": "○",
+      "note": ""
+    },
+    {
+      "userId": "user010",
+      "date": "2024-11-29",
+      "section": "後半",
+      "symbol": "○",
+      "note": ""
+    }
+  ]
+}

@@ -1,0 +1,147 @@
+/**
+ * variables.css
+ * CSS Variables（カスタムプロパティ）
+ * 
+ * プロジェクト全体で使用する色、サイズ、フォント等の定義
+ */
+
+:root {
+  /* ===== Colors ===== */
+  
+  /* Primary Colors */
+  --color-primary: #007bff;
+  --color-primary-light: #4da3ff;
+  --color-primary-dark: #0056b3;
+  
+  /* Secondary Colors */
+  --color-secondary: #6c757d;
+  --color-secondary-light: #adb5bd;
+  --color-secondary-dark: #495057;
+  
+  /* State Colors */
+  --color-success: #28a745;
+  --color-danger: #dc3545;
+  --color-warning: #ffc107;
+  --color-info: #17a2b8;
+  
+  /* Background Colors */
+  --color-bg: #ffffff;
+  --color-bg-alt: #f8f9fa;
+  --color-bg-hover: #e9ecef;
+  --color-bg-disabled: #dee2e6;
+  
+  /* Text Colors */
+  --color-text: #212529;
+  --color-text-secondary: #6c757d;
+  --color-text-muted: #adb5bd;
+  --color-text-inverse: #ffffff;
+  
+  /* Border Colors */
+  --color-border: #dee2e6;
+  --color-border-dark: #ced4da;
+  
+  /* Capacity Colors (定員管理) */
+  --color-capacity-ok: #d4edda;          /* 余裕あり */
+  --color-capacity-near: #fff3cd;        /* やや混雑 */
+  --color-capacity-full: #f8d7da;        /* 定員超過 */
+  
+  /* Section Colors (セクション別) */
+  --color-kayoi: #e3f2fd;                /* 通い：水色 */
+  --color-kayoi-dark: #1976d2;
+  --color-tomari: #fff3e0;               /* 泊まり：オレンジ */
+  --color-tomari-dark: #f57c00;
+  --color-houmon: #f3e5f5;               /* 訪問：紫 */
+  --color-houmon-dark: #7b1fa2;
+  
+  /* ===== Spacing ===== */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+  
+  /* ===== Typography ===== */
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, 
+                 "Helvetica Neue", Arial, "Noto Sans", sans-serif,
+                 "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-family-mono: "SF Mono", "Monaco", "Cascadia Code", "Roboto Mono", 
+                      "Consolas", "Courier New", monospace;
+  
+  /* Font Sizes */
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 18px;
+  --font-size-xxl: 20px;
+  
+  /* Font Weights */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
+  
+  /* Line Heights */
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-loose: 1.8;
+  
+  /* ===== Layout ===== */
+  
+  /* Border Radius */
+  --border-radius-sm: 2px;
+  --border-radius-md: 4px;
+  --border-radius-lg: 8px;
+  --border-radius-xl: 12px;
+  --border-radius-round: 50%;
+  
+  /* Border Width */
+  --border-width-thin: 1px;
+  --border-width-medium: 2px;
+  --border-width-thick: 3px;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  
+  /* Z-Index */
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+  
+  /* ===== Transitions ===== */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.2s ease;
+  --transition-slow: 0.3s ease;
+  
+  /* ===== Grid (スケジュールグリッド用) ===== */
+  
+  /* Cell Sizes */
+  --grid-cell-width: 32px;
+  --grid-cell-height: 24px;
+  --grid-header-height: 40px;
+  
+  /* User Column */
+  --grid-user-column-width: 120px;
+  
+  /* Date Column */
+  --grid-date-column-width: 60px;
+  
+  /* ===== Breakpoints (Phase 2以降) ===== */
+  --breakpoint-sm: 576px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 992px;
+  --breakpoint-xl: 1200px;
+  --breakpoint-xxl: 1400px;
+}
+
+/**
+ * Dark Mode (Phase 2以降)
+ * @media (prefers-color-scheme: dark) で対応予定
+ */

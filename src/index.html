@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="小規模多機能型居宅介護の利用予定調整システム">
+  <title>小規模多機能予定調整B</title>
+  
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/integration.css">
+  <link rel="stylesheet" href="css/kayoi.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 統合ヘッダー（カレンダー操作含む） -->
+    <header class="unified-header">
+      <div class="header-left">
+        <h1 class="app-title">小規模多機能予定調整B</h1>
+        <div class="calendar-controls">
+          <button id="prev-month-btn" class="nav-button">◀</button>
+          <h2 id="current-month">2025年11月</h2>
+          <button id="next-month-btn" class="nav-button">▶</button>
+          <button id="today-btn" class="nav-button">今月</button>
+        </div>
+      </div>
+      <div class="header-right">
+        <button id="print-btn" class="header-button">🖨️ 印刷</button>
+        <button id="export-btn" class="header-button">💾 CSV</button>
+        <button id="settings-btn" class="header-button">⚙️</button>
+        <button id="csv-import-btn" class="header-button">📥</button>
+        <button id="help-btn" class="header-button">❓</button>
+      </div>
+    </header>
+
+    <!-- タブナビゲーション（コンパクト） -->
+    <nav class="section-tabs compact">
+      <button class="tab-button active" data-target="summary">全体</button>
+      <button class="tab-button" data-target="kayoi-section">通い</button>
+      <button class="tab-button" data-target="tomari-section">泊まり</button>
+      <button class="tab-button" data-target="houmon-section">訪問</button>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+      <!-- 日別サマリー -->
+      <section id="summary" class="daily-summary">
+        <table class="summary-table">
+          <tbody id="summary-tbody">
+            <!-- 日別サマリーの内容がJavaScriptで生成される -->
+          </tbody>
+        </table>
+      </section>
+
+      <!-- カレンダー見出し（sticky固定） -->
+      <div class="calendar-header-sticky">
+        <table class="header-table">
+          <thead>
+            <tr id="calendar-header-row">
+              <th class="date-label-cell"></th>
+              <!-- 日付ごとのヘッダーがJavaScriptで生成される -->
+            </tr>
+          </thead>
+        </table>
+      </div>
+
+      <!-- 通いセクション -->
+      <section id="kayoi-section" class="section kayoi-section">
+        <h3 class="section-title">通い（デイサービス）</h3>
+        <div class="section-content">
+          <div id="kayoi-grid">
+            <!-- 通いのグリッドがここに描画される -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 泊まりセクション（未実装） -->
+      <section id="tomari-section" class="section tomari-section">
+        <h3 class="section-title">泊まり（ショートステイ）</h3>
+        <div class="section-content">
+          <p style="text-align: center; padding: 40px; color: #999;">Phase 1-3で実装予定</p>
+        </div>
+      </section>
+
+      <!-- 訪問セクション（未実装） -->
+      <section id="houmon-section" class="section houmon-section">
+        <h3 class="section-title">訪問（訪問介護）</h3>
+        <div class="section-content">
+          <p style="text-align: center; padding: 40px; color: #999;">Phase 1-4で実装予定</p>
+        </div>
+      </section>
+    </main>
+
+    </main>
+
+    <!-- フッター -->
+    <footer class="app-footer">
+      <div class="footer-left">
+        <span id="last-saved">最終保存: --</span>
+      </div>
+      <div class="footer-right">
+        <span>Version 1.0 (Phase 1)</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- モーダル・トースト等の共通コンポーネント -->
+  <div id="modal-overlay"></div>
+  <div id="modal"></div>
+  <div id="toast-container"></div>
+  <div id="loading" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10000;">
+    読み込み中...
+  </div>
+
+  <!-- JavaScript (ES Modules) -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

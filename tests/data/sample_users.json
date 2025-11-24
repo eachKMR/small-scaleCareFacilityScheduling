@@ -1,0 +1,72 @@
+[
+  {
+    "userId": "user001",
+    "name": "田中太郎",
+    "displayName": "田中太郎",
+    "registrationDate": "2024-01-15",
+    "sortId": 1
+  },
+  {
+    "userId": "user002",
+    "name": "佐藤花子",
+    "displayName": "佐藤花子",
+    "registrationDate": "2024-02-01",
+    "sortId": 2
+  },
+  {
+    "userId": "user003",
+    "name": "鈴木一郎",
+    "displayName": "鈴木一郎",
+    "registrationDate": "2024-02-10",
+    "sortId": 3
+  },
+  {
+    "userId": "user004",
+    "name": "高橋美咲",
+    "displayName": "高橋美咲",
+    "registrationDate": "2024-03-01",
+    "sortId": 4
+  },
+  {
+    "userId": "user005",
+    "name": "伊藤健二",
+    "displayName": "伊藤健二",
+    "registrationDate": "2024-03-15",
+    "sortId": 5
+  },
+  {
+    "userId": "user006",
+    "name": "渡辺直美",
+    "displayName": "渡辺直美",
+    "registrationDate": "2024-04-01",
+    "sortId": 6
+  },
+  {
+    "userId": "user007",
+    "name": "山本健太",
+    "displayName": "山本健太",
+    "registrationDate": "2024-04-15",
+    "sortId": 7
+  },
+  {
+    "userId": "user008",
+    "name": "中村幸子",
+    "displayName": "中村幸子",
+    "registrationDate": "2024-05-01",
+    "sortId": 8
+  },
+  {
+    "userId": "user009",
+    "name": "小林正樹",
+    "displayName": "小林正樹",
+    "registrationDate": "2024-05-15",
+    "sortId": 9
+  },
+  {
+    "userId": "user010",
+    "name": "加藤友美",
+    "displayName": "加藤友美",
+    "registrationDate": "2024-06-01",
+    "sortId": 10
+  }
+]

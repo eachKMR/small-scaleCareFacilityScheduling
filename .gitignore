@@ -1,0 +1,47 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# Node (Phase 2以降)
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build (Phase 2以降)
+dist/
+build/
+.cache/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test
+coverage/
+.nyc_output/
+
+# Temp
+tmp/
+temp/
+*.tmp
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# localStorage backup (開発時のバックアップ)
+localStorage-backup-*.json
