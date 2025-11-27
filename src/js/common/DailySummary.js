@@ -1,6 +1,7 @@
 /**
  * DailySummary.js
  * 日別サマリー機能（L3_UI_統合UI設計.md v2.1準拠）
+ * @version 3.0 - 送迎カウント機能追加
  */
 
 /**
@@ -25,10 +26,16 @@ export class DailySummaryGenerator {
       const kayoiMorning = this.countKayoi(kayoiData, dateStr, 'morning');
       const kayoiAfternoon = this.countKayoi(kayoiData, dateStr, 'afternoon');
       
+      // ✨ Phase 1.5: 送迎カウント追加
+      const pickup = this.countPickup(kayoiData, dateStr);
+      const dropoff = this.countDropoff(kayoiData, dateStr);
+      
       summary[dateStr] = {
         kayoiMorning: kayoiMorning,
         kayoiAfternoon: kayoiAfternoon,
         kayoiMax: Math.max(kayoiMorning, kayoiAfternoon), // 表示用：大きい方
+        pickup: pickup,          // ✨ 迎え人数（職員送迎のみ）
+        dropoff: dropoff,        // ✨ 送り人数（職員送迎のみ）
         tomari: this.countTomari(tomariData, dateStr),
         houmon: this.countHoumon(houmonData, dateStr)
       };
@@ -52,6 +59,34 @@ export class DailySummaryGenerator {
       return schedule.date === date && (
         schedule.section === section || schedule.section === 'allDay'
       );
+    }).length;
+  }
+  
+  /**
+   * ✨ Phase 1.5: 迎え人数をカウント（職員送迎のみ）
+   * @param {Array} kayoiData - 通いのスケジュールデータ
+   * @param {string} date - 日付 (YYYY-MM-DD形式)
+   * @returns {number} 人数
+   */
+  static countPickup(kayoiData, date) {
+    if (!Array.isArray(kayoiData)) return 0;
+    
+    return kayoiData.filter(schedule => {
+      return schedule.date === date && schedule.pickupType === 'staff';
+    }).length;
+  }
+  
+  /**
+   * ✨ Phase 1.5: 送り人数をカウント（職員送迎のみ）
+   * @param {Array} kayoiData - 通いのスケジュールデータ
+   * @param {string} date - 日付 (YYYY-MM-DD形式)
+   * @returns {number} 人数
+   */
+  static countDropoff(kayoiData, date) {
+    if (!Array.isArray(kayoiData)) return 0;
+    
+    return kayoiData.filter(schedule => {
+      return schedule.date === date && schedule.dropoffType === 'staff';
     }).length;
   }
   
@@ -117,6 +152,13 @@ export class DailySummaryRenderer {
     const kayoiRow = this.createKayoiRow(summary);
     tableBody.appendChild(kayoiRow);
     
+    // ✨ Phase 1.5: 迎え・送りの行を追加
+    const pickupRow = this.createRow('迎え', summary, 'pickup', null);
+    tableBody.appendChild(pickupRow);
+    
+    const dropoffRow = this.createRow('送り', summary, 'dropoff', null);
+    tableBody.appendChild(dropoffRow);
+    
     // 泊まりの行
     const tomariRow = this.createRow('泊まり', summary, 'tomari', 9);
     tableBody.appendChild(tomariRow);
@@ -146,8 +188,10 @@ export class DailySummaryRenderer {
       const cell = document.createElement('td');
       cell.className = 'summary-cell';
       cell.dataset.date = date;
-      cell.dataset.morning = data.kayoiMorning;   // data属性に保持
+      cell.dataset.morning = data.kayoiMorning;     // data属性に保持
       cell.dataset.afternoon = data.kayoiAfternoon; // data属性に保持
+      cell.dataset.pickup = data.pickup;            // ✨ Phase 1.5: 追加
+      cell.dataset.dropoff = data.dropoff;          // ✨ Phase 1.5: 追加
       cell.textContent = data.kayoiMax; // max値を表示
       
       // 定員状況の色分け（max値で判定、定員15人）
