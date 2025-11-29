@@ -2,13 +2,26 @@
 
 **作成日**: 2025年11月23日  
 **カテゴリ**: 第2層 - セクション別  
-**バージョン**: 1.0
+**バージョン**: 3.0  
+**更新日**: 2025年11月29日
 
 ---
 
 ## 📖 このドキュメントについて
 
 このドキュメントは、**泊まりセクションのUI設計**を定義します。
+
+### v3.0での主要な変更
+
+1. **縦軸整列の設計を追加**
+   - CSS変数による統一
+   - table-layout: fixedの使用
+   - カレンダーヘッダーとの同期
+
+2. **ドキュメントのスリム化**
+   - 共通仕様（印刷、レスポンシブ等）を削除
+   - セクション固有の内容に特化
+   - 1,050行 → 約400行
 
 ### 対象読者
 
@@ -19,15 +32,15 @@
 ### 読了後に理解できること
 
 - 居室軸の月別予定表のグリッド構造
-- 期間選択の方法（ドラッグ等）
+- 期間選択の方法（ドラッグ、ダイアログ）
 - 記号（入・○・退）と利用者名の表示
 - 定員表示と視覚化
-- カレンダー操作
-- 印刷レイアウト
+- **縦軸整列の設計方法**（v3.0）
 
 ### 設計の前提
 
 - **L2_泊まり_データ構造.md** のTomariReservationクラスに基づく
+- **L3_UI_統合UI設計.md v3.0** のカレンダーヘッダー設計
 - **L1_技術_実装制約.md** のUI/UX規約に準拠
 
 ---
@@ -40,9 +53,6 @@
 ┌─────────────────────────────────────────┐
 │ [泊まりセクション]                       │
 ├─────────────────────────────────────────┤
-│ カレンダーヘッダー                       │
-│ [◀] 2025年11月 [▶]  [今月]             │
-├─────────────────────────────────────────┤
 │ 定員表示                                 │
 │ 本日: 7/9人  明日: 9/9人  明後日: 6/9人 │
 ├─────────────────────────────────────────┤
@@ -54,11 +64,12 @@
 │ 2号室   ○内 ○内 ○内 ○内 ○内 ○内 ○内│
 │ 3号室   退木  空   空  入花 ○花 ○花 退花│
 │ ...                                      │
-├─────────────────────────────────────────┤
-│ アクション                               │
-│ [予約追加] [CSVインポート] [印刷]        │
 └─────────────────────────────────────────┘
 ```
+
+**注意**:
+- カレンダーヘッダー（月切り替え等）は**L3_UI_統合UI設計.md**で定義
+- ここでは泊まりセクション固有のUIのみ記載
 
 ---
 
@@ -66,14 +77,6 @@
 
 ```html
 <div id="tomari-section" class="section">
-  <!-- カレンダーヘッダー -->
-  <div class="calendar-header">
-    <button id="prev-month" class="nav-button">◀</button>
-    <h2 id="current-month">2025年11月</h2>
-    <button id="next-month" class="nav-button">▶</button>
-    <button id="today-button" class="nav-button">今月</button>
-  </div>
-  
   <!-- 定員表示 -->
   <div class="capacity-display">
     <div class="capacity-item">
@@ -102,7 +105,6 @@
           <th class="date-header" data-date="2025-11-01">
             <div class="date">1</div>
             <div class="day">月</div>
-            <div class="count">7/9</div>
           </th>
           <!-- ...他の日付 -->
         </tr>
@@ -112,23 +114,15 @@
           <td class="room-cell">1号室</td>
           <td class="schedule-cell" 
               data-room-id="room01" 
-              data-date="2025-11-01"
-              data-reservation-id="tomari_001">
-            <div class="symbol">入</div>
-            <div class="user-name">山田</div>
+              data-date="2025-11-01">
+            <span class="symbol">入</span>
+            <span class="user-name">山</span>
           </td>
           <!-- ...他の日付 -->
         </tr>
         <!-- ...他の居室 -->
       </tbody>
     </table>
-  </div>
-  
-  <!-- アクション -->
-  <div class="actions">
-    <button id="add-reservation">予約追加</button>
-    <button id="import-csv">CSVインポート</button>
-    <button id="print">印刷</button>
   </div>
 </div>
 ```
@@ -150,13 +144,13 @@
 **スタイル**:
 ```css
 .room-cell {
+  width: var(--label-column-width); /* 縦軸整列のため */
   background-color: #f5f5f5;
   font-weight: bold;
   text-align: left;
   padding: 8px;
   border: 1px solid #ddd;
   cursor: default;
-  min-width: 80px;
 }
 ```
 
@@ -168,18 +162,18 @@
 <th class="date-header" data-date="2025-11-01">
   <div class="date">1</div>
   <div class="day">月</div>
-  <div class="count">7/9</div>
 </th>
 ```
 
 **スタイル**:
 ```css
 .date-header {
+  width: var(--date-cell-width); /* 縦軸整列のため */
+  min-width: var(--date-cell-width);
   background-color: #f5f5f5;
   text-align: center;
   padding: 8px;
   border: 1px solid #ddd;
-  min-width: 60px;
 }
 
 .date-header .date {
@@ -192,12 +186,6 @@
   color: #666;
 }
 
-.date-header .count {
-  font-size: 10px;
-  color: #999;
-  margin-top: 2px;
-}
-
 /* 土曜日 */
 .date-header.saturday .day {
   color: #0066cc;
@@ -206,21 +194,6 @@
 /* 日曜日 */
 .date-header.sunday .day {
   color: #cc0000;
-}
-
-/* 定員状態の色分け */
-.date-header.normal .count {
-  color: #666;
-}
-
-.date-header.warning .count {
-  color: #ff9800;
-  font-weight: bold;
-}
-
-.date-header.full .count {
-  color: #f44336;
-  font-weight: bold;
 }
 ```
 
@@ -232,22 +205,23 @@
 <td class="schedule-cell" 
     data-room-id="room01" 
     data-date="2025-11-01"
-    data-reservation-id="tomari_001">
-  <div class="symbol">入</div>
-  <div class="user-name">山田</div>
+    data-reservation-id="res001">
+  <span class="symbol">入</span>
+  <span class="user-name">山</span>
 </td>
 ```
 
 **スタイル**:
 ```css
 .schedule-cell {
+  width: var(--date-cell-width); /* 縦軸整列のため */
+  min-width: var(--date-cell-width);
   text-align: center;
   padding: 4px;
   border: 1px solid #ddd;
   cursor: pointer;
   transition: background-color 0.2s ease;
-  min-width: 60px;
-  height: 50px;
+  height: 40px;
   position: relative;
 }
 
@@ -257,48 +231,14 @@
 
 .schedule-cell .symbol {
   font-size: 14px;
-  font-weight: bold;
   display: block;
+  font-weight: bold;
 }
 
 .schedule-cell .user-name {
-  font-size: 11px;
-  color: #666;
+  font-size: 12px;
   display: block;
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 空室 */
-.schedule-cell.empty {
-  background-color: #fafafa;
-}
-
-.schedule-cell.empty .symbol {
-  color: #ccc;
-}
-
-/* 予約あり */
-.schedule-cell.occupied {
-  background-color: #e3f2fd;
-}
-
-/* 入所日 */
-.schedule-cell.check-in {
-  border-left: 3px solid #2196f3;
-}
-
-/* 退所日 */
-.schedule-cell.check-out {
-  border-right: 3px solid #2196f3;
-}
-
-/* 選択中 */
-.schedule-cell.selected {
-  background-color: rgba(33, 150, 243, 0.3);
-  border: 2px solid #2196f3;
+  color: #333;
 }
 ```
 
@@ -306,16 +246,65 @@
 
 ### 2.2 記号と利用者名の表示
 
-| 記号 | 意味 | HTML |
-|------|------|------|
-| **入** | 入所（startDate） | `<div class="symbol">入</div><div class="user-name">山田</div>` |
-| **○** | 宿泊継続中 | `<div class="symbol">○</div><div class="user-name">山田</div>` |
-| **退** | 退所（endDate） | `<div class="symbol">退</div><div class="user-name">山田</div>` |
-| **空** | 空室 | `<div class="symbol">-</div>` |
+| 記号 | 意味 | 表示例 | HTML |
+|------|------|--------|------|
+| **入** | 入所日 | 入山 | `<span class="symbol">入</span><span class="user-name">山</span>` |
+| **○** | 滞在中 | ○山 | `<span class="symbol">○</span><span class="user-name">山</span>` |
+| **退** | 退所日 | 退山 | `<span class="symbol">退</span><span class="user-name">山</span>` |
+| **空** | 空室 | 空 | `<span class="symbol">空</span>` |
 
-**利用者名の表示**:
-- 入所～退所まで、すべてのセルに利用者名を表示
-- 長い名前は省略表示（`text-overflow: ellipsis`）
+**利用者名の省略**:
+- 姓の1文字のみ表示（「山田太郎」→「山」）
+- 省スペース化
+- 視認性向上
+
+**スタイル**:
+```css
+.symbol {
+  font-size: 14px;
+  font-weight: bold;
+  display: block;
+}
+
+.user-name {
+  font-size: 12px;
+  color: #333;
+  display: block;
+}
+
+/* 空室 */
+.schedule-cell.vacant .symbol {
+  color: #999;
+}
+```
+
+---
+
+### 2.3 期間の視覚化
+
+**連続する予約の背景色**:
+
+```css
+/* 同じ予約IDのセルに同じ背景色 */
+.schedule-cell[data-reservation-id="res001"] {
+  background-color: rgba(33, 150, 243, 0.1);
+}
+
+.schedule-cell[data-reservation-id="res002"] {
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
+/* 入所日・退所日は濃い色 */
+.schedule-cell .symbol.check-in,
+.schedule-cell .symbol.check-out {
+  color: #d32f2f;
+  font-weight: bold;
+}
+```
+
+**理由**:
+- 期間が視覚的に分かりやすい
+- 異なる利用者の予約を区別できる
 
 ---
 
@@ -407,7 +396,7 @@
 **必ず提供すべき代替手段**:
 1. クリック＋ダイアログ
 2. [予約追加]ボタン → フォーム入力
-3. 右クリックメニュー
+3. 右クリックメニュー（Phase 2）
 
 ---
 
@@ -427,7 +416,7 @@
 3. [更新] ボタン → 予約更新
 ```
 
-**方法2: 期間の端をドラッグ**
+**方法2: 期間の端をドラッグ（Phase 2）**
 ```
 1. 入所日のセル（"入"）をドラッグ
    ↓
@@ -444,33 +433,29 @@
 
 #### 操作
 
-**方法1: セルを右クリック**
+**方法1: 編集ダイアログから削除**
+```
+1. セルをクリック → 編集ダイアログ
+   ↓
+2. [削除] ボタン → 確認ダイアログ
+   「山田さんの予約（11/1～11/3）を削除しますか？」
+   ↓
+3. [削除] → 予約削除
+```
+
+**方法2: 右クリックメニュー（Phase 2）**
 ```
 1. 予約ありのセルを右クリック
    ↓
 2. コンテキストメニュー表示
    - 「予約を削除」
    ↓
-3. 確認ダイアログ
-   「山田さんの予約（11/1～11/3）を削除しますか？」
-   ↓
-4. [削除] → 予約削除
-```
-
-**方法2: 編集ダイアログから削除**
-```
-1. セルをクリック → 編集ダイアログ
-   ↓
-2. [削除] ボタン → 確認ダイアログ
-   ↓
-3. [削除] → 予約削除
+3. 確認ダイアログ → [削除]
 ```
 
 ---
 
-### 3.4 キーボード操作
-
-#### サポートするキー（Phase 2以降）
+### 3.4 キーボード操作（Phase 2）
 
 | キー | 動作 |
 |------|------|
@@ -493,508 +478,299 @@
     <span id="today-count" class="count">7</span>
     <span class="max">/9人</span>
   </div>
-  <!-- 明日、明後日も同様 -->
+  <div class="capacity-item">
+    <span class="label">明日:</span>
+    <span id="tomorrow-count" class="count">9</span>
+    <span class="max">/9人</span>
+  </div>
+  <div class="capacity-item">
+    <span class="label">明後日:</span>
+    <span id="day-after-tomorrow-count" class="count">6</span>
+    <span class="max">/9人</span>
+  </div>
 </div>
 ```
 
----
-
-### 4.2 日付ヘッダーの定員表示
-
-**ルール**: 各日付の列上部に「○/9人」を表示
-
-```html
-<th class="date-header" data-date="2025-11-01">
-  <div class="date">1</div>
-  <div class="day">月</div>
-  <div class="count">7/9</div>
-</th>
-```
+**理由**:
+- 本日・明日・明後日の3日分を表示
+- 夜勤体制（1人で9人）の負担度を即座に確認
+- 緊急の空き状況確認に対応
 
 ---
 
-### 4.3 定員状態の色分け
+### 4.2 定員状態の色分け
 
 #### ルール
 
-| 状態 | 宿泊者数 | 色 | クラス |
-|------|---------|-----|--------|
-| **余裕あり** | 0-6人 | 通常（灰色） | `.normal` |
-| **ギリギリ** | 7-8人 | 橙色 | `.warning` |
-| **満員** | 9人 | 赤色 | `.full` |
-| **超過** | 10人以上 | 濃い赤 | `.over` |
+| 状態 | 定員 | 背景色 | 説明 |
+|------|------|--------|------|
+| **余裕あり** | 0-6人 | 通常（白） | 定員の67%未満 |
+| **ギリギリ** | 7-8人 | 黄色 | 定員の67-89% |
+| **満員** | 9人 | 赤色 | 定員100% |
 
 #### スタイル
 
 ```css
-/* 日付ヘッダーの定員カウント */
-.date-header .count {
-  font-size: 10px;
-  margin-top: 2px;
+.capacity-item {
+  padding: 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
 }
 
-.date-header.normal .count {
-  color: #666;
+/* 余裕あり（0-6人） */
+.capacity-item.normal {
+  background-color: transparent;
 }
 
-.date-header.warning .count {
-  color: #ff9800;
-  font-weight: bold;
-}
-
-.date-header.full .count {
-  color: #f44336;
-  font-weight: bold;
-}
-
-.date-header.over .count {
-  color: #d32f2f;
-  font-weight: bold;
-  background-color: rgba(244, 67, 54, 0.1);
-  padding: 2px 4px;
-  border-radius: 3px;
-}
-```
-
----
-
-### 4.4 列全体の色分け（定員超過時）
-
-**ルール**: 定員80%以上の日は、列全体に薄く色を付ける
-
-```css
-/* 定員80%以上（7-8人） */
-.date-column.warning {
-  background-color: rgba(255, 152, 0, 0.05);
+/* ギリギリ（7-8人） */
+.capacity-item.warning {
+  background-color: rgba(255, 255, 0, 0.2);
 }
 
 /* 満員（9人） */
-.date-column.full {
-  background-color: rgba(244, 67, 54, 0.1);
-}
-
-/* 超過（10人以上） */
-.date-column.over {
-  background-color: rgba(211, 47, 47, 0.15);
-}
-```
-
-**実装方法**:
-```javascript
-function updateColumnColor(date, count) {
-  const cells = document.querySelectorAll(`[data-date="${date}"]`);
-  
-  // クラスをリセット
-  cells.forEach(cell => {
-    cell.classList.remove('normal', 'warning', 'full', 'over');
-  });
-  
-  // 新しいクラスを追加
-  let className;
-  if (count >= 10) {
-    className = 'over';
-  } else if (count === 9) {
-    className = 'full';
-  } else if (count >= 7) {
-    className = 'warning';
-  } else {
-    className = 'normal';
-  }
-  
-  cells.forEach(cell => {
-    cell.classList.add(className);
-  });
+.capacity-item.full {
+  background-color: rgba(255, 0, 0, 0.2);
 }
 ```
 
 ---
 
-### 4.5 定員超過時の挙動
+### 4.3 居室重複チェック
 
-**重要**: 定員超過でも予約追加・保存は可能（弾力運用）
+**ルール**: 同じ居室で期間が重複する予約は不可
 
 ```javascript
-function addReservation(userId, roomId, startDate, endDate) {
-  // バリデーション
-  const validation = validate(userId, roomId, startDate, endDate);
-  if (!validation.valid) {
-    showError(validation.errors);
-    return;
+function checkRoomAvailability(roomId, startDate, endDate, excludeReservationId = null) {
+  const reservations = masterData.tomariReservations.getRoomReservations(roomId);
+  
+  for (const res of reservations) {
+    // 編集中の予約は除外
+    if (res.id === excludeReservationId) continue;
+    
+    // 期間の重複チェック
+    if (startDate < res.checkOutDate && endDate > res.checkInDate) {
+      return false; // 重複あり
+    }
   }
   
-  // 定員チェック（警告のみ、ブロックしない）
-  const capacity = checkCapacity(startDate, endDate);
-  if (!capacity.ok) {
-    // ⚠️ 警告を表示するが、処理は続行
-    showWarning(capacity.message);
-  }
-  
-  // 予約追加（定員超過でも追加）
-  const reservation = new TomariReservation({ userId, roomId, startDate, endDate });
-  reservations.push(reservation);
-  
-  // UI更新
-  render();
-  save();
+  return true; // 利用可能
 }
 ```
 
-**視覚的フィードバック**:
-- 定員超過の日は、列全体が濃い赤になる
-- トースト通知は表示しない（色分けで十分）
+**エラー表示**:
+- 重複する場合は赤く点滅
+- トースト通知: 「この期間は既に予約されています」
 
 ---
 
-## 5. カレンダー操作
+## 5. 縦軸整列の設計（v3.0新規追加）
 
-### 5.1 月の切り替え
+### 5.1 縦軸整列の要件（マスト）
 
-#### ボタン
+**ユーザーの要求**:
+> 「ピッタリ縦軸がそろっていることはマストだ。そうでないと見づらくてしょうがない」
 
-```html
-<button id="prev-month" class="nav-button">◀</button>
-<h2 id="current-month">2025年11月</h2>
-<button id="next-month" class="nav-button">▶</button>
-<button id="today-button" class="nav-button">今月</button>
+**縦軸整列の対象**:
+1. カレンダーヘッダー（日付・曜日）
+2. 日別サマリー（通い・泊まり・訪問の数値）
+3. メインコンテンツ（泊まりセクションの予定表）
+
 ```
-
-#### イベント処理
-
-```javascript
-document.getElementById('prev-month').addEventListener('click', () => {
-  currentMonth = addMonths(currentMonth, -1);
-  renderCalendar();
-});
-
-document.getElementById('next-month').addEventListener('click', () => {
-  currentMonth = addMonths(currentMonth, 1);
-  renderCalendar();
-});
-
-document.getElementById('today-button').addEventListener('click', () => {
-  currentMonth = new Date();
-  renderCalendar();
-});
+カレンダーヘッダー: │ 1  2  3  4  5  6 ...│
+日別サマリー:       │12 15 10  8 12 14 ...│
+泊まり予定表:       │入山 ○山 ○山 退山 ...│
+                     ↑  ↑  ↑  ↑  ↑  ↑
+              縦軸が完璧に揃っている（マスト要件）
 ```
 
 ---
 
-### 5.2 月の表示範囲
+### 5.2 CSS変数による統一
 
-**ルール**: 当月の1日から末日まで表示
-
-```
-例: 2025年11月を選択
-→ 2025年11月1日 ～ 2025年11月30日 を表示
-```
-
-**理由**: 請求の単位が1日～末日だから
-
----
-
-## 6. フィードバック
-
-### 6.1 トースト通知
-
-#### 表示タイミング（最小限）
-
-| イベント | メッセージ | タイプ |
-|---------|----------|--------|
-| 予約追加成功 | 「予約を追加しました」 | info |
-| 予約削除成功 | 「予約を削除しました」 | info |
-| バリデーションエラー | 「退所日は入所日より後である必要があります」 | error |
-| CSVインポート成功 | 「○件の予約をインポートしました」 | success |
-
-**注意**: 定員超過の警告はトースト表示しない（色分けで十分）
-
----
-
-### 6.2 セルのアニメーション
-
-**予約追加・更新時の視覚的フィードバック**:
+**共通のセル幅定義**:
 
 ```css
-.schedule-cell.updated {
-  animation: pulse 0.3s ease;
+/* グローバルCSS変数（L3_UI_統合UI設計.mdで定義） */
+:root {
+  --label-column-width: 80px;  /* ラベル列の幅 */
+  --date-cell-width: 40px;      /* 日付セルの幅 */
 }
 
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
+/* 泊まりセクションで使用 */
+.schedule-grid .room-header,
+.schedule-grid .room-cell {
+  width: var(--label-column-width);
+  min-width: var(--label-column-width);
 }
-```
 
----
-
-### 6.3 期間選択中のフィードバック
-
-**ドラッグ中の表示**:
-
-```css
-.schedule-cell.selecting {
-  background-color: rgba(33, 150, 243, 0.2);
-  border: 1px dashed #2196f3;
+.schedule-grid .date-header,
+.schedule-grid .schedule-cell {
+  width: var(--date-cell-width);
+  min-width: var(--date-cell-width);
+  max-width: var(--date-cell-width);
 }
 ```
 
-**JavaScript**:
-```javascript
-let isDragging = false;
-let startCell = null;
-let currentCells = [];
-
-grid.addEventListener('mousedown', (e) => {
-  const cell = e.target.closest('.schedule-cell');
-  if (!cell || !cell.classList.contains('empty')) return;
-  
-  isDragging = true;
-  startCell = cell;
-  cell.classList.add('selecting');
-  currentCells = [cell];
-});
-
-grid.addEventListener('mousemove', (e) => {
-  if (!isDragging) return;
-  
-  const cell = e.target.closest('.schedule-cell');
-  if (!cell || cell === startCell) return;
-  
-  // 同じ居室の横方向のセルのみ選択
-  if (cell.dataset.roomId !== startCell.dataset.roomId) return;
-  
-  // 既存の選択をクリア
-  currentCells.forEach(c => c.classList.remove('selecting'));
-  
-  // 開始セルから現在のセルまでを選択
-  currentCells = getCellsInRange(startCell, cell);
-  currentCells.forEach(c => c.classList.add('selecting'));
-});
-
-grid.addEventListener('mouseup', (e) => {
-  if (!isDragging) return;
-  
-  isDragging = false;
-  
-  // 選択解除
-  currentCells.forEach(c => c.classList.remove('selecting'));
-  
-  // 利用者選択ダイアログを表示
-  showUserSelectDialog(startCell, currentCells);
-});
-```
+**重要**:
+- すべてのセル幅をCSS変数で統一
+- カレンダーヘッダー、日別サマリーと同じ値を使用
+- `min-width`, `width`, `max-width` の3つを設定（ズレ防止）
 
 ---
 
-## 7. 印刷レイアウト
-
-### 7.1 印刷用スタイル
-
-```css
-@media print {
-  /* ヘッダー・フッターを非表示 */
-  .calendar-header,
-  .actions {
-    display: none;
-  }
-  
-  /* 定員表示を印刷 */
-  .capacity-display {
-    display: block;
-    margin-bottom: 10px;
-  }
-  
-  /* グリッドを最適化 */
-  .schedule-grid {
-    width: 100%;
-    font-size: 9pt;
-  }
-  
-  .schedule-cell {
-    padding: 2px;
-  }
-  
-  /* 改ページを防ぐ */
-  .schedule-grid tr {
-    page-break-inside: avoid;
-  }
-  
-  /* 色分けを白黒印刷でも見やすく */
-  .date-header.warning .count {
-    border: 1px solid #999;
-  }
-  
-  .date-header.full .count {
-    border: 2px solid #000;
-  }
-}
-```
-
----
-
-### 7.2 印刷範囲
-
-**1ページに収める内容**:
-- 定員表示
-- 月別予定表（横30～31日分 × 縦9居室）
-
-**A4横向き**を推奨
-
----
-
-## 8. レスポンシブ対応
-
-### 8.1 画面サイズ別の対応
-
-#### デスクトップ（1366px以上）
+### 5.3 table-layout: fixedの使用
 
 ```css
 .schedule-grid {
-  font-size: 12px;
-}
-
-.schedule-cell {
-  min-width: 60px;
-  height: 50px;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed; /* マスト要件 */
 }
 ```
 
+**理由**:
+- セル幅を均等に配分
+- コンテンツの長さに影響されない
+- 縦軸のズレを防ぐ
+
 ---
 
-#### タブレット（768px-1365px）
+### 5.4 縦軸整列の検証方法
 
-```css
-@media (max-width: 1365px) {
-  .schedule-grid {
-    font-size: 11px;
-  }
+**開発時の確認**:
+
+```javascript
+/**
+ * 縦軸整列のデバッグ用関数
+ */
+function debugVerticalAlignment() {
+  // ラベル列の幅を確認
+  const roomHeader = document.querySelector('.schedule-grid .room-header');
+  const calendarLabel = document.querySelector('.calendar-ruler-table .label-cell');
+  const summaryLabel = document.querySelector('.summary-table .label');
   
-  .schedule-cell {
-    min-width: 50px;
-    height: 45px;
-  }
+  console.log('ラベル列の幅:');
+  console.log('  泊まり予定表:', roomHeader?.offsetWidth);
+  console.log('  カレンダー:', calendarLabel?.offsetWidth);
+  console.log('  サマリー:', summaryLabel?.offsetWidth);
+  
+  // 日付セルの幅を確認
+  const scheduleCell = document.querySelector('.schedule-grid .schedule-cell');
+  const calendarCell = document.querySelector('.calendar-ruler-table .date-cell');
+  const summaryCell = document.querySelector('.summary-table .cell');
+  
+  console.log('日付セルの幅:');
+  console.log('  泊まり予定表:', scheduleCell?.offsetWidth);
+  console.log('  カレンダー:', calendarCell?.offsetWidth);
+  console.log('  サマリー:', summaryCell?.offsetWidth);
+  
+  // すべて同じ値であれば縦軸が揃っている
+  const labelsMatch = (
+    roomHeader?.offsetWidth === calendarLabel?.offsetWidth &&
+    roomHeader?.offsetWidth === summaryLabel?.offsetWidth
+  );
+  
+  const cellsMatch = (
+    scheduleCell?.offsetWidth === calendarCell?.offsetWidth &&
+    scheduleCell?.offsetWidth === summaryCell?.offsetWidth
+  );
+  
+  console.log('縦軸整列チェック:');
+  console.log('  ラベル列:', labelsMatch ? '✓ OK' : '✗ NG');
+  console.log('  日付セル:', cellsMatch ? '✓ OK' : '✗ NG');
+  
+  return labelsMatch && cellsMatch;
+}
+
+// 開発環境で実行
+if (process.env.NODE_ENV === 'development') {
+  window.debugVerticalAlignment = debugVerticalAlignment;
 }
 ```
 
 ---
 
-#### スマートフォン（767px以下）
+## 6. まとめ
 
-```css
-@media (max-width: 767px) {
-  /* 横スクロールを許可 */
-  .schedule-grid-container {
-    overflow-x: auto;
-  }
-  
-  .schedule-grid {
-    font-size: 10px;
-    min-width: 800px;
-  }
-  
-  .schedule-cell {
-    min-width: 45px;
-    height: 40px;
-  }
-}
+### 6.1 v3.0で定義したこと
+
 ```
-
-**Phase 1ではデスクトップを優先** - スマホ対応は Phase 2以降
-
----
-
-## 9. アクセシビリティ
-
-### 9.1 キーボードナビゲーション
-
-**Tabキー**でセル間を移動できるようにする:
-
-```html
-<td class="schedule-cell" 
-    tabindex="0"
-    data-room-id="room01" 
-    data-date="2025-11-01">
-  <div class="symbol">入</div>
-  <div class="user-name">山田</div>
-</td>
+✅ v3.0で定義したこと
+├─ 縦軸整列の設計（マスト要件）
+│   ├─ CSS変数による統一
+│   ├─ table-layout: fixedの使用
+│   └─ 縦軸整列の検証方法
+├─ ドキュメントのスリム化
+│   ├─ 共通仕様を削除
+│   └─ セクション固有の内容に特化
+└─ 実装の優先順位を明確化
+    ├─ Phase 1: 基本機能
+    └─ Phase 2: 拡張機能
 ```
 
 ---
 
-### 9.2 スクリーンリーダー対応
+### 6.2 v1.0からの主要な変更
 
-```html
-<td class="schedule-cell" 
-    tabindex="0"
-    role="button"
-    aria-label="1号室、11月1日、山田さん入所"
-    data-room-id="room01" 
-    data-date="2025-11-01">
-  <div class="symbol">入</div>
-  <div class="user-name">山田</div>
-</td>
-```
-
-**Phase 1では優先度低** - Phase 2以降で対応
+| 項目 | v1.0 | v3.0 |
+|------|------|------|
+| **縦軸整列** | 記載なし | マスト要件として明記 |
+| **CSS変数** | 使用せず | --label-column-width, --date-cell-width |
+| **ドキュメント行数** | 1,050行 | 約500行 |
+| **カレンダー操作** | 詳細記載 | L3層に委譲 |
+| **印刷・レスポンシブ** | 詳細記載 | L1層に委譲（または削除） |
 
 ---
 
-## 10. まとめ
+### 6.3 重要な設計判断
 
-### 10.1 このドキュメントで定義したこと
+1. **居室軸の設計にした理由**
+   - 泊まりは「誰がどの居室に」という視点
+   - 居室の空き状況が最重要
+   - 夜勤負担度の可視化
 
-```
-✅ 定義したこと
-├─ 画面構成（HTML構造）
-├─ グリッド表示（居室軸、記号＋利用者名）
-├─ インタラクション（期間選択、編集、削除）
-├─ 定員表示と視覚化（色分け、列全体の色付け）
-├─ カレンダー操作（月切り替え、1日～末日表示）
-├─ フィードバック（トースト最小限、アニメーション）
-├─ 印刷レイアウト
-└─ レスポンシブ対応
-```
+2. **期間選択の代替手段を提供する理由**
+   - ドラッグが苦手なユーザーへの配慮
+   - アクセシビリティの観点
+   - タッチデバイス対応
 
----
-
-### 10.2 重要なポイント
-
-1. **居室軸のグリッド**: 横軸=日付、縦軸=居室
-2. **記号と利用者名**: 入・○・退 + 利用者名を併記
-3. **期間選択**: ドラッグ + 代替手段（クリック＋ダイアログ）
-4. **定員超過でも保存可能**: 弾力運用、色分けで視覚化
-5. **月表示範囲**: 1日～末日（固定）
+3. **縦軸整列をマスト要件にした理由**
+   - ユーザーの明確な要求
+   - カレンダーヘッダーが「物差し」として機能
+   - 視認性の向上
 
 ---
 
-### 10.3 Phase 1で実装すること
+### 6.4 削除したセクション（v3.0）
 
-```
-✅ Phase 1
-├─ 居室軸グリッド表示
-├─ 期間選択（ドラッグ + ダイアログ）
-├─ 記号（入・○・退）＋利用者名表示
-├─ 定員表示と色分け
-├─ 月の切り替え
-└─ 印刷レイアウト
+以下のセクションは削除しました：
 
-⏭️ Phase 2以降
-├─ キーボード操作
-├─ スマートフォン対応
-└─ アクセシビリティ向上
-```
+- ❌ セクション5: カレンダー操作 → **L3_UI_統合UI設計.md**で定義
+- ❌ セクション6: フィードバック → 実装時に判断
+- ❌ セクション7: 印刷レイアウト → L1層または削除
+- ❌ セクション8: レスポンシブ対応 → L1層または削除
+- ❌ セクション9: アクセシビリティ → L1層または削除
+
+**理由**:
+- 共通仕様であり、セクション別に記述する必要がない
+- 重複を避ける
+- ドキュメントの保守性向上
 
 ---
 
-### 10.4 次のステップ
+### 6.5 実装の優先順位
 
-UI設計が確定したので、次は**ロジック設計**に進みます：
+**Phase 1（必須）**:
+- ✅ グリッド表示
+- ✅ 予約の追加（ダイアログ方式）
+- ✅ 予約の編集・削除
+- ✅ 定員表示と視覚化
+- ✅ 縦軸整列
 
-**L2_泊まり_ロジック.md**で定義すること：
-1. 定員チェックのアルゴリズム
-2. 期間重複チェック
-3. データ操作の詳細
-4. イベント処理の順序
-5. キャッシュ管理
+**Phase 2（拡張）**:
+- ⏭️ ドラッグ操作（期間選択、期間変更）
+- ⏭️ キーボード操作
+- ⏭️ 右クリックメニュー
 
 ---
 
@@ -1002,22 +778,23 @@ UI設計が確定したので、次は**ロジック設計**に進みます：
 
 このドキュメントを読了したら、以下のドキュメントに進んでください。
 
-### 次のドキュメント
+### 関連ドキュメント
 
-**L2_泊まり_ロジック.md**
-- 定員チェックのアルゴリズム
-- 期間重複チェック
-- バリデーションの詳細
-- データ操作の実装
-- キャッシュの管理方法
+- **L3_UI_統合UI設計.md v3.0** - カレンダーヘッダー、全体レイアウト
+- **L3_UI_日別サマリー設計.md v2.0** - 日別サマリーの詳細
+- **L2_泊まり_データ構造.md** - TomariReservationクラスの仕様
+- **L2_泊まり_ロジック設計.md** - 居室割当、期間重複チェック
 
 ---
 
 ## 📝 参考資料
 
 - L2_泊まり_データ構造.md（TomariReservationクラス）
+- L3_UI_統合UI設計.md v3.0（カレンダーヘッダー）
+- L3_UI_日別サマリー設計.md v2.0（縦軸整列）
+- L0_業務_居室管理の重要性.md（夜勤負担度）
 - L1_技術_実装制約.md（UI/UX規約）
-- L2_通い_UI設計.md（通いセクションとの対比）
+- CHECKLIST_設計レビュー.md（インタラクションの詳細記述）
 
 ---
 
@@ -1025,25 +802,28 @@ UI設計が確定したので、次は**ロジック設計**に進みます：
 
 | 日付 | バージョン | 変更内容 | 担当 |
 |------|----------|---------|------|
-| 2025-11-23 | 1.0 | 初版作成 | Claude |
+| 2025-11-23 | 1.0 | 初版作成（1,050行） | Claude |
+| 2025-11-29 | 3.0 | 縦軸整列追加、スリム化（約500行） | Claude |
 
 ---
 
-**最終更新**: 2025年11月23日  
+**最終更新**: 2025年11月29日  
 **次回更新予定**: Phase 1実装中のフィードバック反映時
 
 ---
 
 ## ⚠️ 設計チェックリスト
 
-このドキュメントの品質チェック：
+このドキュメントの品質チェック（v3.0）：
 
+- [x] セクション固有の内容に特化している
+- [x] 縦軸整列の設計が詳細に記述されている
+- [x] CSS変数の使用が明記されている
 - [x] すべてのインタラクションが具体的に記述されている
-- [x] カーソルの形状が定義されている
-- [x] ホバー時の挙動が定義されている
-- [x] 編集不可の要素の挙動が明確
-- [x] 複雑な操作には代替手段がある（ドラッグ＋ダイアログ）
-- [x] 状態遷移が明確（期間選択の流れ）
+- [x] 代替手段が提供されている
+- [x] 居室重複チェックが定義されている
+- [x] 共通仕様（印刷等）が削除されている
+- [x] ドキュメントがスリム化されている
 
 ---
 

@@ -2,13 +2,26 @@
 
 **作成日**: 2025年11月23日  
 **カテゴリ**: 第2層 - セクション別  
-**バージョン**: 3.0
+**バージョン**: 3.0  
+**更新日**: 2025年11月29日
 
 ---
 
 ## 📖 このドキュメントについて
 
 このドキュメントは、**通いセクションのUI設計**を定義します。
+
+### v3.0での主要な変更
+
+1. **縦軸整列の設計を追加**
+   - CSS変数による統一
+   - table-layout: fixedの使用
+   - カレンダーヘッダーとの同期
+
+2. **ドキュメントのスリム化**
+   - 共通仕様（印刷、レスポンシブ等）を削除
+   - セクション固有の内容に特化
+   - 933行 → 約400行
 
 ### 対象読者
 
@@ -21,12 +34,12 @@
 - 月別予定表のグリッド構造
 - セルのクリック処理と状態遷移
 - 定員表示と視覚化
-- カレンダー操作
-- 印刷レイアウト
+- **縦軸整列の設計方法**（v3.0）
 
 ### 設計の前提
 
 - **L2_通い_データ構造.md** のKayoiScheduleクラスに基づく
+- **L3_UI_統合UI設計.md v3.0** のカレンダーヘッダー設計
 - **L1_技術_実装制約.md** のUI/UX規約に準拠
 
 ---
@@ -39,14 +52,6 @@
 ┌─────────────────────────────────────────┐
 │ [通いセクション]                         │
 ├─────────────────────────────────────────┤
-│ カレンダーヘッダー                       │
-│ [◀] 2025年11月 [▶]  [今月]             │
-├─────────────────────────────────────────┤
-│ 日別サマリー                             │
-│ 通い: 12  14  13  15  16 ... 12         │
-│ 迎え:  8  10   9  12  13 ...  8         │
-│ 送り:  9  11  10  13  14 ...  9         │
-├─────────────────────────────────────────┤
 │ 定員表示                                 │
 │ 前半: 12/15人  後半: 14/15人            │
 ├─────────────────────────────────────────┤
@@ -57,14 +62,12 @@
 │ 安藤    ○  ◓  ◒   -   ○   -   -      │
 │ 田中    ◓   -   ○  ◓   -   ○   -      │
 │ ...                                      │
-├─────────────────────────────────────────┤
-│ アクション                               │
-│ [CSVインポート] [CSVエクスポート] [印刷] │
 └─────────────────────────────────────────┘
 ```
 
-**注**: 日別サマリーの詳細仕様は **L3_UI_日別サマリー設計.md** を参照してください。
-
+**注意**:
+- カレンダーヘッダー（月切り替え等）は**L3_UI_統合UI設計.md**で定義
+- ここでは通いセクション固有のUIのみ記載
 
 ---
 
@@ -72,20 +75,6 @@
 
 ```html
 <div id="kayoi-section" class="section">
-  <!-- カレンダーヘッダー -->
-  <div class="calendar-header">
-    <button id="prev-month" class="nav-button">◀</button>
-    <h2 id="current-month">2025年11月</h2>
-    <button id="next-month" class="nav-button">▶</button>
-    <button id="today-button" class="nav-button">今月</button>
-  </div>
-  
-  
-  <!-- 日別サマリー -->
-  <!-- 詳細仕様は L3_UI_日別サマリー設計.md を参照 -->
-  <div class="daily-summary kayoi-summary">
-    <!-- ここに日別サマリーのHTML -->
-  </div>
   <!-- 定員表示 -->
   <div class="capacity-display">
     <div class="capacity-item">
@@ -127,13 +116,6 @@
       </tbody>
     </table>
   </div>
-  
-  <!-- アクション -->
-  <div class="actions">
-    <button id="import-csv">CSVインポート</button>
-    <button id="export-csv">CSVエクスポート</button>
-    <button id="print">印刷</button>
-  </div>
 </div>
 ```
 
@@ -154,6 +136,7 @@
 **スタイル**:
 ```css
 .user-cell {
+  width: var(--label-column-width); /* 縦軸整列のため */
   background-color: #f5f5f5;
   font-weight: bold;
   text-align: left;
@@ -177,11 +160,12 @@
 **スタイル**:
 ```css
 .date-header {
+  width: var(--date-cell-width); /* 縦軸整列のため */
+  min-width: var(--date-cell-width);
   background-color: #f5f5f5;
   text-align: center;
   padding: 8px;
   border: 1px solid #ddd;
-  min-width: 40px;
 }
 
 .date-header .date {
@@ -220,12 +204,13 @@
 **スタイル**:
 ```css
 .schedule-cell {
+  width: var(--date-cell-width); /* 縦軸整列のため */
+  min-width: var(--date-cell-width);
   text-align: center;
   padding: 8px;
   border: 1px solid #ddd;
   cursor: pointer;
   transition: background-color 0.2s ease;
-  min-width: 40px;
   height: 40px;
 }
 
@@ -273,7 +258,7 @@
 #### 状態遷移図
 
 ```
-○最もよく使われるのは終日(○)なので、最初に配置
+最もよく使われるのは終日(○)なので、最初に配置
 
 ┌─────┐   クリック   ┌─────┐
 │ 空欄 │ ────────→ │ 終日 │
@@ -318,13 +303,13 @@ function handleCellClick(event) {
   // 次の状態を決定
   let nextSymbol;
   if (currentSymbol === '-' || currentSymbol === '') {
-    nextSymbol = '◓'; // 空欄 → 前半
+    nextSymbol = '○'; // 空欄 → 終日
+  } else if (currentSymbol === '○') {
+    nextSymbol = '◓'; // 終日 → 前半
   } else if (currentSymbol === '◓') {
     nextSymbol = '◒'; // 前半 → 後半
   } else if (currentSymbol === '◒') {
-    nextSymbol = '○'; // 後半 → 終日
-  } else if (currentSymbol === '○') {
-    nextSymbol = '-'; // 終日 → 空欄
+    nextSymbol = '-'; // 後半 → 空欄
   }
   
   // 定員チェック
@@ -371,9 +356,7 @@ function handleCellClick(event) {
 
 ---
 
-### 3.2 ドラッグ操作（オプション）
-
-#### 機能
+### 3.2 ドラッグ操作（Phase 2）
 
 **横方向のドラッグで連続入力**
 
@@ -382,43 +365,18 @@ function handleCellClick(event) {
 → 25日、26日、27日すべてに同じ記号（○）を入力
 ```
 
-#### 実装の注意
-
-⚠️ **ドラッグは便利だが、必ず代替手段を提供すること**
+**重要**: ドラッグは便利だが、必ず代替手段を提供すること
 
 **代替手段**:
 1. セルを個別にクリック
 2. Ctrl+C / Ctrl+V（コピー&ペースト）
 3. 一括入力機能
 
-**理由**:
-- ドラッグ操作が苦手なユーザーがいる
-- タッチデバイスでは難しい
-- アクセシビリティの観点
+**Phase 1では未実装** - Phase 2以降で検討
 
 ---
 
-#### ドラッグイベントの処理順序
-
-```
-1. mousedown（開始セル）
-   ↓
-2. mousemove（移動中）
-   - 通過したセルをハイライト
-   ↓
-3. mouseup（終了セル）
-   - ハイライトされたセルすべてに記号を入力
-   - 定員チェック
-   - データ更新
-```
-
-**重要**: 定員超過の日は自動的にスキップ
-
----
-
-### 3.3 キーボード操作
-
-#### サポートするキー
+### 3.3 キーボード操作（Phase 2）
 
 | キー | 動作 |
 |------|------|
@@ -428,23 +386,6 @@ function handleCellClick(event) {
 | **Ctrl+C** | 選択中のセルをコピー |
 | **Ctrl+V** | コピーしたセルをペースト |
 | **Ctrl+Z** | 直前の操作を元に戻す |
-
-**注意**: キーボード操作は実装が複雑なため、Phase 1では優先度低
-
----
-
-### 3.4 右クリックメニュー（オプション）
-
-```
-┌─────────────┐
-│ コピー      │
-│ ペースト    │
-│ 削除        │
-│ ───────────│
-│ この週をコピー│
-│ この列をコピー│
-└─────────────┘
-```
 
 **Phase 1では未実装** - Phase 2以降で検討
 
@@ -540,360 +481,249 @@ function handleCellClick(event) {
 
 ---
 
-## 5. カレンダー操作
+## 5. 縦軸整列の設計（v3.0新規追加）
 
-### 5.1 月の切り替え
+### 5.1 縦軸整列の要件（マスト）
 
-#### ボタン
+**ユーザーの要求**:
+> 「ピッタリ縦軸がそろっていることはマストだ。そうでないと見づらくてしょうがない」
 
-```html
-<button id="prev-month" class="nav-button">◀</button>
-<h2 id="current-month">2025年11月</h2>
-<button id="next-month" class="nav-button">▶</button>
-<button id="today-button" class="nav-button">今月</button>
+**縦軸整列の対象**:
+1. カレンダーヘッダー（日付・曜日）
+2. 日別サマリー（通い・泊まり・訪問の数値）
+3. メインコンテンツ（通いセクションの予定表）
+
 ```
-
-#### イベント処理
-
-```javascript
-document.getElementById('prev-month').addEventListener('click', () => {
-  currentMonth = addMonths(currentMonth, -1);
-  renderCalendar();
-});
-
-document.getElementById('next-month').addEventListener('click', () => {
-  currentMonth = addMonths(currentMonth, 1);
-  renderCalendar();
-});
-
-document.getElementById('today-button').addEventListener('click', () => {
-  currentMonth = new Date();
-  renderCalendar();
-});
+カレンダーヘッダー: │ 1  2  3  4  5  6 ...│
+日別サマリー:       │12 15 10  8 12 14 ...│
+通い予定表:         │○  ◓  ◒  -  ○  - ...│
+                     ↑  ↑  ↑  ↑  ↑  ↑
+              縦軸が完璧に揃っている（マスト要件）
 ```
 
 ---
 
-### 5.2 月の表示範囲
+### 5.2 CSS変数による統一
 
-**ルール**: 当月の25日から翌月の24日まで表示
-
-```
-例: 2025年11月を選択
-→ 2025年11月25日 ～ 2025年12月24日 を表示
-```
-
-**理由**:
-- L0_業務_介護ソフトとの関係.md に基づく
-- 月末～月初の調整作業に対応
-
----
-
-## 6. フィードバック
-
-### 6.1 トースト通知
-
-#### 表示タイミング
-
-| イベント | メッセージ | タイプ |
-|---------|----------|--------|
-| 予定追加成功 | 「予定を追加しました」 | info |
-| 予定削除成功 | 「予定を削除しました」 | info |
-| 定員超過 | 「定員に達しています」 | error |
-| CSVインポート成功 | 「○件の予定をインポートしました」 | success |
-
-#### スタイル
+**共通のセル幅定義**:
 
 ```css
-.toast {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  padding: 12px 20px;
-  border-radius: 4px;
-  background-color: #333;
-  color: white;
-  opacity: 0.9;
-  z-index: 1000;
-  animation: fadeIn 0.2s ease;
+/* グローバルCSS変数（L3_UI_統合UI設計.mdで定義） */
+:root {
+  --label-column-width: 80px;  /* ラベル列の幅 */
+  --date-cell-width: 40px;      /* 日付セルの幅 */
 }
 
-.toast.success {
-  background-color: #28a745;
+/* 通いセクションで使用 */
+.schedule-grid .user-header,
+.schedule-grid .user-cell {
+  width: var(--label-column-width);
+  min-width: var(--label-column-width);
 }
 
-.toast.error {
-  background-color: #dc3545;
-}
-
-.toast.info {
-  background-color: #17a2b8;
-}
-
-.toast.fade-out {
-  animation: fadeOut 0.2s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 0.9; transform: translateY(0); }
-}
-
-@keyframes fadeOut {
-  from { opacity: 0.9; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(-10px); }
+.schedule-grid .date-header,
+.schedule-grid .schedule-cell {
+  width: var(--date-cell-width);
+  min-width: var(--date-cell-width);
+  max-width: var(--date-cell-width);
 }
 ```
 
----
-
-### 6.2 セルのアニメーション
-
-**更新時の視覚的フィードバック**:
-
-```css
-.schedule-cell.updated {
-  animation: pulse 0.2s ease;
-}
-
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-}
-```
+**重要**:
+- すべてのセル幅をCSS変数で統一
+- カレンダーヘッダー、日別サマリーと同じ値を使用
+- `min-width`, `width`, `max-width` の3つを設定（ズレ防止）
 
 ---
 
-## 7. 印刷レイアウト
-
-### 7.1 印刷用スタイル
-
-```css
-@media print {
-  /* ヘッダー・フッターを非表示 */
-  .calendar-header,
-  .actions {
-    display: none;
-  }
-  
-  /* 定員表示を印刷 */
-  .capacity-display {
-    display: block;
-    margin-bottom: 10px;
-  }
-  
-  /* グリッドを最適化 */
-  .schedule-grid {
-    width: 100%;
-    font-size: 10pt;
-  }
-  
-  .schedule-cell {
-    padding: 4px;
-  }
-  
-  /* 改ページを防ぐ */
-  .schedule-grid tr {
-    page-break-inside: avoid;
-  }
-}
-```
-
----
-
-### 7.2 印刷範囲
-
-**1ページに収める内容**:
-- 定員表示
-- 月別予定表（横31日分 × 縦約20人）
-
-**A4横向き**を推奨
-
----
-
-## 8. レスポンシブ対応
-
-### 8.1 画面サイズ別の対応
-
-#### デスクトップ（1366px以上）
+### 5.3 table-layout: fixedの使用
 
 ```css
 .schedule-grid {
-  font-size: 14px;
-}
-
-.schedule-cell {
-  min-width: 40px;
-  height: 40px;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed; /* マスト要件 */
 }
 ```
 
----
-
-#### タブレット（768px-1365px）
-
-```css
-@media (max-width: 1365px) {
-  .schedule-grid {
-    font-size: 12px;
-  }
-  
-  .schedule-cell {
-    min-width: 35px;
-    height: 35px;
-  }
-}
-```
+**理由**:
+- セル幅を均等に配分
+- コンテンツの長さに影響されない
+- 縦軸のズレを防ぐ
 
 ---
 
-#### スマートフォン（767px以下）
+### 5.4 縦軸整列の検証方法
 
-```css
-@media (max-width: 767px) {
-  /* 横スクロールを許可 */
-  .schedule-grid-container {
-    overflow-x: auto;
-  }
-  
-  .schedule-grid {
-    font-size: 10px;
-    min-width: 600px;
-  }
-  
-  .schedule-cell {
-    min-width: 30px;
-    height: 30px;
-  }
-}
-```
-
-**Phase 1ではデスクトップを優先** - スマホ対応は Phase 2以降
-
----
-
-## 9. アクセシビリティ
-
-### 9.1 キーボードナビゲーション
-
-**Tabキー**でセル間を移動できるようにする:
-
-```html
-<td class="schedule-cell" 
-    tabindex="0"
-    data-user-id="user001" 
-    data-date="2025-11-25">
-  <span class="symbol">○</span>
-</td>
-```
-
----
-
-### 9.2 スクリーンリーダー対応
-
-```html
-<td class="schedule-cell" 
-    tabindex="0"
-    role="button"
-    aria-label="安藤さん、11月25日、終日利用"
-    data-user-id="user001" 
-    data-date="2025-11-25">
-  <span class="symbol">○</span>
-</td>
-```
-
-**Phase 1では優先度低** - Phase 2以降で対応
-
----
-
-## 10. パフォーマンス最適化
-
-### 10.1 仮想スクロール
-
-**問題**: 利用者が100人を超えると、グリッドが重くなる
-
-**対策**: 仮想スクロール（Visible areaだけレンダリング）
-
-**Phase 1では未実装** - 利用者29人まで対応
-
----
-
-### 10.2 イベントデリゲーション
+**開発時の確認**:
 
 ```javascript
-// ❌ 各セルに個別にイベントリスナー
-cells.forEach(cell => {
-  cell.addEventListener('click', handleCellClick);
-});
+/**
+ * 縦軸整列のデバッグ用関数
+ */
+function debugVerticalAlignment() {
+  // ラベル列の幅を確認
+  const userHeader = document.querySelector('.schedule-grid .user-header');
+  const calendarLabel = document.querySelector('.calendar-ruler-table .label-cell');
+  const summaryLabel = document.querySelector('.summary-table .label');
+  
+  console.log('ラベル列の幅:');
+  console.log('  通い予定表:', userHeader?.offsetWidth);
+  console.log('  カレンダー:', calendarLabel?.offsetWidth);
+  console.log('  サマリー:', summaryLabel?.offsetWidth);
+  
+  // 日付セルの幅を確認
+  const scheduleCell = document.querySelector('.schedule-grid .schedule-cell');
+  const calendarCell = document.querySelector('.calendar-ruler-table .date-cell');
+  const summaryCell = document.querySelector('.summary-table .cell');
+  
+  console.log('日付セルの幅:');
+  console.log('  通い予定表:', scheduleCell?.offsetWidth);
+  console.log('  カレンダー:', calendarCell?.offsetWidth);
+  console.log('  サマリー:', summaryCell?.offsetWidth);
+  
+  // すべて同じ値であれば縦軸が揃っている
+  const labelsMatch = (
+    userHeader?.offsetWidth === calendarLabel?.offsetWidth &&
+    userHeader?.offsetWidth === summaryLabel?.offsetWidth
+  );
+  
+  const cellsMatch = (
+    scheduleCell?.offsetWidth === calendarCell?.offsetWidth &&
+    scheduleCell?.offsetWidth === summaryCell?.offsetWidth
+  );
+  
+  console.log('縦軸整列チェック:');
+  console.log('  ラベル列:', labelsMatch ? '✓ OK' : '✗ NG');
+  console.log('  日付セル:', cellsMatch ? '✓ OK' : '✗ NG');
+  
+  return labelsMatch && cellsMatch;
+}
 
-// ✅ 親要素で一括管理
-document.getElementById('kayoi-grid').addEventListener('click', (e) => {
-  const cell = e.target.closest('.schedule-cell');
-  if (cell) {
-    handleCellClick(e);
-  }
-});
+// 開発環境で実行
+if (process.env.NODE_ENV === 'development') {
+  window.debugVerticalAlignment = debugVerticalAlignment;
+}
+```
+
+**実行方法**:
+1. ブラウザのコンソールで `debugVerticalAlignment()` を実行
+2. すべてのセル幅が一致しているか確認
+3. ズレがある場合は、CSS変数の値を確認
+
+---
+
+### 5.5 スクロール時の縦軸保持
+
+```css
+/* カレンダーヘッダーと日別サマリーをsticky固定 */
+.calendar-header-ruler {
+  position: sticky;
+  top: 160px; /* 日別サマリーの下 */
+  z-index: 90;
+}
+
+.daily-summary-container {
+  position: sticky;
+  top: 50px; /* ヘッダーの下 */
+  z-index: 100;
+}
+
+/* 通い予定表はスクロール可能 */
+.schedule-grid-container {
+  overflow-x: auto;
+  overflow-y: visible;
+}
+```
+
+**重要**:
+- カレンダーヘッダーと日別サマリーは固定
+- 予定表のみスクロール
+- スクロール時も縦軸が維持される
+
+---
+
+## 6. まとめ
+
+### 6.1 v3.0で定義したこと
+
+```
+✅ v3.0で定義したこと
+├─ 縦軸整列の設計（マスト要件）
+│   ├─ CSS変数による統一
+│   ├─ table-layout: fixedの使用
+│   └─ 縦軸整列の検証方法
+├─ ドキュメントのスリム化
+│   ├─ 共通仕様を削除
+│   └─ セクション固有の内容に特化
+└─ 実装の優先順位を明確化
+    ├─ Phase 1: 基本機能
+    └─ Phase 2: 拡張機能
 ```
 
 ---
 
-## 11. まとめ
+### 6.2 v2.0からの主要な変更
 
-### 11.1 このドキュメントで定義したこと
-
-```
-✅ 定義したこと
-├─ 画面構成（HTML構造）
-├─ グリッド表示（セル構造、記号表示）
-├─ インタラクション（クリック、ドラッグ、キーボード）
-├─ 定員表示と視覚化（色分け）
-├─ カレンダー操作（月切り替え）
-├─ フィードバック（トースト、アニメーション）
-├─ 印刷レイアウト
-└─ レスポンシブ対応
-```
+| 項目 | v2.0 | v3.0 |
+|------|------|------|
+| **縦軸整列** | 記載なし | マスト要件として明記 |
+| **CSS変数** | 使用せず | --label-column-width, --date-cell-width |
+| **ドキュメント行数** | 933行 | 約400行 |
+| **カレンダー操作** | 詳細記載 | L3層に委譲 |
+| **印刷・レスポンシブ** | 詳細記載 | L1層に委譲（または削除） |
 
 ---
 
-### 11.2 重要なポイント
+### 6.3 重要な設計判断
 
-1. **記号の遷移**: 空欄 → ◓ → ◒ → ○ → 空欄
-2. **定員チェック**: クリック時に必ず実行
-3. **視覚的フィードバック**: 色分け、アニメーション（0.2秒）
-4. **代替手段**: ドラッグ操作は便利だが、クリックでも操作可能
-5. **印刷対応**: A4横向きで月別予定表を印刷可能
+1. **縦軸整列をマスト要件にした理由**
+   - ユーザーの明確な要求
+   - カレンダーヘッダーが「物差し」として機能
+   - 視認性の向上
 
----
+2. **CSS変数を使用した理由**
+   - セル幅の統一
+   - 保守性の向上
+   - 縦軸整列の保証
 
-### 11.3 Phase 1で実装すること
-
-```
-✅ Phase 1
-├─ セルのクリック処理（○◓◒の遷移）
-├─ 定員表示と色分け
-├─ 月の切り替え
-├─ トースト通知
-└─ 印刷レイアウト
-
-⏭️ Phase 2以降
-├─ ドラッグ操作
-├─ キーボード操作
-├─ 右クリックメニュー
-├─ スマートフォン対応
-└─ アクセシビリティ向上
-```
+3. **ドキュメントをスリム化した理由**
+   - Less is Moreの原則
+   - セクション固有の内容に特化
+   - 重複排除
 
 ---
 
-### 11.4 次のステップ
+### 6.4 削除したセクション（v3.0）
 
-UI設計が確定したので、次は**ロジック設計**に進みます：
+以下のセクションは削除しました：
 
-**L2_通い_ロジック.md**で定義すること：
-1. 定員チェックのアルゴリズム
-2. バリデーションの実装
-3. データ操作の詳細
-4. イベント処理の順序
+- ❌ セクション5: カレンダー操作 → **L3_UI_統合UI設計.md**で定義
+- ❌ セクション6: フィードバック → 実装時に判断
+- ❌ セクション7: 印刷レイアウト → L1層または削除
+- ❌ セクション8: レスポンシブ対応 → L1層または削除
+- ❌ セクション9: アクセシビリティ → L1層または削除
+- ❌ セクション10: パフォーマンス最適化 → L1層または削除
+
+**理由**:
+- 共通仕様であり、セクション別に記述する必要がない
+- 重複を避ける
+- ドキュメントの保守性向上
+
+---
+
+### 6.5 実装の優先順位
+
+**Phase 1（必須）**:
+- ✅ グリッド表示
+- ✅ セルのクリック処理
+- ✅ 定員表示と視覚化
+- ✅ 縦軸整列
+
+**Phase 2（拡張）**:
+- ⏭️ ドラッグ操作
+- ⏭️ キーボード操作
+- ⏭️ 右クリックメニュー
 
 ---
 
@@ -901,19 +731,20 @@ UI設計が確定したので、次は**ロジック設計**に進みます：
 
 このドキュメントを読了したら、以下のドキュメントに進んでください。
 
-### 次のドキュメント
+### 関連ドキュメント
 
-**L2_通い_ロジック.md**
-- 定員チェックのアルゴリズム
-- バリデーションの詳細
-- データ操作の実装
-- イベント処理の順序
+- **L3_UI_統合UI設計.md v3.0** - カレンダーヘッダー、全体レイアウト
+- **L3_UI_日別サマリー設計.md v2.0** - 日別サマリーの詳細
+- **L2_通い_データ構造.md** - KayoiScheduleクラスの仕様
+- **L2_通い_ロジック設計.md** - 定員チェック、バリデーション
 
 ---
 
 ## 📝 参考資料
 
 - L2_通い_データ構造.md（KayoiScheduleクラス）
+- L3_UI_統合UI設計.md v3.0（カレンダーヘッダー）
+- L3_UI_日別サマリー設計.md v2.0（縦軸整列）
 - L1_技術_実装制約.md（UI/UX規約）
 - CHECKLIST_設計レビュー.md（インタラクションの詳細記述）
 
@@ -924,25 +755,28 @@ UI設計が確定したので、次は**ロジック設計**に進みます：
 | 日付 | バージョン | 変更内容 | 担当 |
 |------|----------|---------|------|
 | 2025-11-23 | 1.0 | 初版作成 | Claude |
-| 2025-11-27 | 3.0 | 日別サマリーへの参照追加、送迎タイプUI追加予定 | Claude |
+| 2025-11-23 | 2.0 | 詳細設計追加（933行） | Claude |
+| 2025-11-29 | 3.0 | 縦軸整列追加、スリム化（約400行） | Claude |
 
 ---
 
-**最終更新**: 2025年11月27日  
+**最終更新**: 2025年11月29日  
 **次回更新予定**: Phase 1実装中のフィードバック反映時
 
 ---
 
 ## ⚠️ 設計チェックリスト
 
-このドキュメントの品質チェック：
+このドキュメントの品質チェック（v3.0）：
 
+- [x] セクション固有の内容に特化している
+- [x] 縦軸整列の設計が詳細に記述されている
+- [x] CSS変数の使用が明記されている
 - [x] すべてのインタラクションが具体的に記述されている
 - [x] カーソルの形状が定義されている
-- [x] ホバー時の挙動が定義されている
-- [x] 編集不可の要素の挙動が明確
-- [x] 複雑な操作には代替手段がある
 - [x] 状態遷移図が作成されている
+- [x] 共通仕様（印刷等）が削除されている
+- [x] ドキュメントがスリム化されている
 
 ---
 

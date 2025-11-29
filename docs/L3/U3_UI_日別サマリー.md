@@ -1,14 +1,30 @@
 # L3_UI_日別サマリー設計
 
-**作成日**: 2025年11月27日  
+**作成日**: 2025年11月29日  
 **カテゴリ**: 第3層 - 統合設計  
-**バージョン**: 1.0
+**バージョン**: 2.0  
+**更新日**: 2025年11月29日
 
 ---
 
 ## 📖 このドキュメントについて
 
-このドキュメントは、**日別サマリー**の設計を定義します。
+このドキュメントは、**日別サマリー（3行表示）の詳細設計**を定義します。
+
+### v2.0での主要な変更
+
+1. **日付行の削除（4行 → 3行）**
+   - 日付表示の責任をカレンダーヘッダーに委譲
+   - 省スペース化
+   
+2. **カレンダーヘッダーとの連動**
+   - カレンダーヘッダーが日付・曜日を担当
+   - 日別サマリーは数値のみを表示
+   
+3. **縦軸整列の要件反映**
+   - CSS変数による統一
+   - `table-layout: fixed` の使用
+   - カレンダーヘッダーとの縦軸同期
 
 ### 対象読者
 
@@ -18,1256 +34,1040 @@
 
 ### 読了後に理解できること
 
-- 日別サマリーの目的と役割
-- 各セクション別の表示内容
-- HTML/CSS/JavaScript の実装方法
-- ホバーポップアップと詳細モードの仕様
-- 送迎量の表示方法
+- 日別サマリーの3行構成（v2.0）
+- 色分け表示の仕様
+- トグル機能の設計
+- カレンダーヘッダーとの連動方法
+- 縦軸整列の実装方法
 
 ### 設計の前提
 
-- **L2_通い_データ構造.md** のKayoiScheduleクラス（pickupType/dropoffType）
-- **L2_泊まり_データ構造.md** の介助量管理
-- **L2_訪問_データ構造.md** のHoumonScheduleクラス
-- **L3_UI_統合UI設計.md** の画面構成
+- **L3_UI_統合UI設計.md v3.0** のカレンダーヘッダー設計
+- **L0_業務_居室管理の重要性.md** の夜勤負担度
+- **L0_業務_調整業務の制約.md** のリソース管理
+- **L1_技術_実装制約.md** のUI/UX規約
 
 ---
 
-## 1. 日別サマリーの目的と役割
+## 1. 日別サマリーの概要
 
-### 1.1 概要
+### 1.1 目的
 
-**日別サマリー**は、月別予定表の**日付ヘッダー下部**に表示される集計行です。
-
-```
-┌─────────────────────────────────────┐
-│      1  2  3  4  5  ... 30         │  ← 日付ヘッダー
-│      土 日 月 火 水  ... 土         │
-├─────────────────────────────────────┤
-│通い  12 14 13 15 16 ... 12         │  ← 日別サマリー
-│迎え   8 10  9 12 13 ...  8         │
-│送り   9 11 10 13 14 ...  9         │
-├─────────────────────────────────────┤
-│利用者名                              │  ← メイングリッド
-│ ...                                 │
-└─────────────────────────────────────┘
-```
-
----
-
-### 1.2 業務上の価値
-
-#### 電話対応時
-「今月、通いの空きはありますか？」
-→ パッと見て数字が少ない日を探せる
-
-#### 調整作業時
-「送迎車両が足りるか？」
-→ 迎え・送りの人数を一目で確認
-
-#### 新規受入判断
-「この日は受け入れられるか？」
-→ 定員、送迎状況を即座に判断
-
----
-
-### 1.3 セクション別に特化
-
-**重要な設計原則**: 各タブで、そのセクションに関連する情報のみ表示
-
-| タブ | 日別サマリー内容 |
-|------|---------------|
-| **通い** | 通い人数、迎え人数、送り人数 |
-| **泊まり** | 泊まり人数、介助量（重度・中度・軽度） |
-| **訪問** | 訪問回数のみ |
-| **全体** | 3サービスの統合ビュー |
-
-❌ すべてのタブで同じ3行（通い・泊まり・訪問）を表示しない
-
----
-
-## 2. 通いセクションの日別サマリー
-
-### 2.1 表示内容（3行）
+**月全体のリソース状況を一目で把握する**
 
 ```
-通い（デイサービス）                [詳細表示 ▼]
-┌─────────────────────────────────────┐
-│通い 12  14  13  15  16 ... 12      │ ← 標準の高さ（24px）
-├─────────────────────────────────────┤
-│迎え  8  10   9  12  13 ...  8      │ ← 細い行（16px）
-│送り  9  11  10  13  14 ...  9      │ ← 細い行（16px）
-└─────────────────────────────────────┘
-```
+目的:
+1. 3サービスの同時管理
+   ├─ 通い・泊まり・訪問の利用状況を1画面で確認
+   └─ 空き状況の即答（営業対応）
 
-**3行の意味**:
-1. **通い**: 利用者総数（前半・後半の最大値）
-2. **迎え**: 職員送迎が必要な人数（朝）
-3. **送り**: 職員送迎が必要な人数（夕方）
+2. 負担度の可視化
+   ├─ 色分けで視覚的に表示（青→黄→赤）
+   └─ 調整が必要な日を即座に発見
 
-**縦幅**: 約56px（通い 24px + 迎え 16px + 送り 16px）
-
----
-
-### 2.2 通常モード（合算表示）
-
-#### 前半・後半は原則1行
-
-**理由**: 95%以上の利用者は全日利用のため
-
-```
-通い（デイサービス）                [詳細表示 ▼]
-┌─────────────────────────────────────┐
-│通い 12  14  13  15  16 ... 12      │
-└─────────────────────────────────────┘
-```
-
-**表示内容**: 前半と後半の最大値
-
-**例**:
-- 前半12人、後半10人 → 「**12**」と表示
-- 前半15人、後半16人 → 「**16**」と表示（超過 → 赤色）
-
----
-
-### 2.3 ホバーポップアップ
-
-#### 動作
-
-**マウスを3日のセルに乗せると**:
-
-```
-        3日
-┌─────────────┐
-│ 通い: 13     │
-│ 前半: 13     │
-│ 後半: 11     │
-│ ─────────── │
-│ 迎え: 9      │
-│ 送り: 10     │
-└─────────────┘
-```
-
-#### 用途
-
-- **電話対応中に素早く確認**
-- 「前半と後半、どちらが空いているか？」を即答
-
-#### Phase 2以降の拡張余地
-
-ポップアップに以下の情報を追加する可能性（Phase 2以降で検討）:
-- 1便・2便の区別
-- 送迎ルート情報
-- 送迎時間設定マトリックスとの連携
-- 送迎車両の配車状況
-
-**注意**: Phase 1では基本情報のみ。具体的な拡張仕様は業務要件を詰めてから設計。
-
----
-
-### 2.4 詳細表示モード（前半・後半を展開）
-
-#### トグルボタンで切り替え
-
-```
-通い（デイサービス）                [合算表示 ▲]
-┌─────────────────────────────────────┐
-│通い 12  14  13  15  16 ... 12      │ ← 24px
-├─────────────────────────────────────┤
-│前半 12  14  13  15  15 ... 12      │ ← 16px
-│後半 10  12  11  14  16 ... 10      │ ← 16px
-├─────────────────────────────────────┤
-│迎え  8  10   9  12  13 ...  8      │ ← 16px
-│送り  9  11  10  13  14 ...  9      │ ← 16px
-└─────────────────────────────────────┘
-```
-
-**用途**:
-- 月間の調整作業
-- 前半・後半のバランスを見ながら予定を組む
-- 定員超過の日を探す
-
-**縦幅**: 約88px
-
-#### 状態の保存
-
-トグルの状態は `localStorage` に保存し、次回も同じモードで表示
-
-```javascript
-localStorage.setItem('kayoi-summary-mode', 'detail'); // or 'simple'
+3. 初心者への支援
+   ├─ 数字だけでなく、色で判断できる
+   └─ 経験がなくても負担度が分かる
 ```
 
 ---
 
-### 2.5 送迎量の表示
+### 1.2 表示内容（v2.0）
 
-#### 背景
+```
+v2.0（3行のみ）:
+┌───────────────────────────────────────┐
+│通 12 15 10  8 12 14 15  9 11 13 ...  │ ← 通い利用者数
+│泊  5  9  6  4  7  8  9  5  6  8 ...  │ ← 泊まり利用者数
+│訪  8 12 10  6  9 11 15  7  8 10 ...  │ ← 訪問回数
+└───────────────────────────────────────┘
 
-**業務上の重要性**:
-1. **送迎車両の配車計画**
-2. **新規利用者の受入判断**（送迎車が満車の場合）
-3. **送迎ルートの最適化**
-
-#### データ構造
-
-`KayoiSchedule` クラスに以下のプロパティを追加（L2_通い_データ構造.md v3.0で定義済み）:
-
-```javascript
-{
-  pickupType: "staff",  // "staff" | "family"
-  dropoffType: "staff"  // "staff" | "family"
-}
+日付・曜日はカレンダーヘッダーが担当
 ```
 
-#### 計算ロジック
-
-```javascript
-function calculateDailySummary(schedules, date) {
-  const dateSchedules = schedules.filter(s => s.date === date);
-  
-  // 通い人数（前半・後半の最大値）
-  const zenhanCount = dateSchedules.filter(
-    s => s.section === "前半" || s.section === "終日"
-  ).length;
-  
-  const kohanCount = dateSchedules.filter(
-    s => s.section === "後半" || s.section === "終日"
-  ).length;
-  
-  const kayoiCount = Math.max(zenhanCount, kohanCount);
-  
-  // 送迎人数（職員送迎のみカウント）
-  const pickupCount = dateSchedules.filter(
-    s => s.pickupType === "staff"
-  ).length;
-  
-  const dropoffCount = dateSchedules.filter(
-    s => s.dropoffType === "staff"
-  ).length;
-  
-  return {
-    kayoi: kayoiCount,
-    zenhan: zenhanCount,
-    kohan: kohanCount,
-    pickup: pickupCount,
-    dropoff: dropoffCount
-  };
-}
-```
+**v1.0からの変更**:
+- ❌ 日付行を削除（1, 2, 3, ... の行）
+- ✅ 数値のみを表示（通い・泊まり・訪問）
 
 ---
 
-### 2.6 HTML構造
+### 1.3 v2.0の設計思想
+
+**責任の分離**
+
+| コンポーネント | 責任 |
+|---------------|------|
+| **カレンダーヘッダー** | 日付・曜日の表示 |
+| **日別サマリー** | 数値の表示・色分け |
+| **メインコンテンツ** | 詳細なスケジュール |
+
+**理由**:
+- 日付表示の一元化
+- 省スペース化（3行で済む）
+- 責任が明確（日付はカレンダーヘッダーのみ）
+
+---
+
+## 2. HTML構造（v2.0）
+
+### 2.1 全体構造
 
 ```html
-<div class="daily-summary kayoi-summary">
-  <!-- ヘッダー -->
-  <div class="summary-header">
-    <h4>通い（デイサービス）</h4>
-    <button id="toggle-detail" class="toggle-button">
-      <span class="label">詳細表示</span>
+<!-- 日別サマリーコンテナ -->
+<div id="daily-summary-container" class="daily-summary-container">
+  <!-- トグルヘッダー -->
+  <div class="daily-summary-header">
+    <h3>日別サマリー</h3>
+    <button 
+      class="toggle-summary-button" 
+      aria-label="日別サマリーを折りたたむ"
+      aria-expanded="true"
+    >
       <span class="icon">▼</span>
     </button>
   </div>
   
-  <!-- 通常モード（初期表示） -->
-  <div class="summary-rows simple-mode">
-    <div class="summary-row main-row">
-      <span class="label">通い</span>
-      <span class="count-cell hover-trigger" 
-            data-date="2025-11-01"
-            data-kayoi="12"
-            data-zenhan="12"
-            data-kohan="10"
-            data-pickup="8"
-            data-dropoff="9">12</span>
-      <span class="count-cell hover-trigger" 
-            data-date="2025-11-02"
-            data-kayoi="14"
-            data-zenhan="14"
-            data-kohan="12"
-            data-pickup="10"
-            data-dropoff="11">14</span>
-      <!-- ... 他の日（30日分） -->
+  <!-- サマリー内容 -->
+  <div id="daily-summary-content" class="daily-summary-content" data-visible="true">
+    <div class="daily-summary integrated-summary active" data-section="integrated">
+      <table class="summary-table">
+        <tbody>
+          <!-- 通い行 -->
+          <tr class="summary-row kayoi-row">
+            <td class="label">通い</td>
+            <td class="cell" data-date="2025-11-01" style="background-color: #99cc00;">
+              <span class="count">12</span>
+            </td>
+            <td class="cell" data-date="2025-11-02" style="background-color: #ffff00;">
+              <span class="count">15</span>
+            </td>
+            <!-- ...他の日付（月末まで） -->
+          </tr>
+          
+          <!-- 泊まり行 -->
+          <tr class="summary-row tomari-row">
+            <td class="label">泊まり</td>
+            <td class="cell" data-date="2025-11-01" style="background-color: #0099ff;">
+              <span class="count">5</span>
+            </td>
+            <td class="cell" data-date="2025-11-02" style="background-color: #ffff00;">
+              <span class="count">9</span>
+            </td>
+            <!-- ...他の日付（月末まで） -->
+          </tr>
+          
+          <!-- 訪問行 -->
+          <tr class="summary-row houmon-row">
+            <td class="label">訪問</td>
+            <td class="cell" data-date="2025-11-01" style="background-color: #99cc00;">
+              <span class="count">8</span>
+            </td>
+            <td class="cell" data-date="2025-11-02" style="background-color: #ffff00;">
+              <span class="count">12</span>
+            </td>
+            <!-- ...他の日付（月末まで） -->
+          </tr>
+        </tbody>
+      </table>
     </div>
-    <div class="summary-row sub-row">
-      <span class="label">迎え</span>
-      <span class="count-cell">8</span>
-      <span class="count-cell">10</span>
-      <!-- ... 他の日 -->
-    </div>
-    <div class="summary-row sub-row">
-      <span class="label">送り</span>
-      <span class="count-cell">9</span>
-      <span class="count-cell">11</span>
-      <!-- ... 他の日 -->
-    </div>
-  </div>
-  
-  <!-- 詳細モード（初期非表示） -->
-  <div class="summary-rows detail-mode" style="display: none;">
-    <div class="summary-row main-row">
-      <span class="label">通い</span>
-      <!-- ... -->
-    </div>
-    <div class="summary-row sub-row">
-      <span class="label">前半</span>
-      <!-- ... -->
-    </div>
-    <div class="summary-row sub-row">
-      <span class="label">後半</span>
-      <!-- ... -->
-    </div>
-    <div class="summary-row sub-row">
-      <span class="label">迎え</span>
-      <!-- ... -->
-    </div>
-    <div class="summary-row sub-row">
-      <span class="label">送り</span>
-      <!-- ... -->
-    </div>
-  </div>
-  
-  <!-- ホバーポップアップ（共通） -->
-  <div class="hover-popup" style="display: none;">
-    <div class="popup-row"><strong>通い:</strong> <span id="popup-kayoi">-</span></div>
-    <div class="popup-row">前半: <span id="popup-zenhan">-</span></div>
-    <div class="popup-row">後半: <span id="popup-kohan">-</span></div>
-    <div class="popup-divider"></div>
-    <div class="popup-row">迎え: <span id="popup-pickup">-</span></div>
-    <div class="popup-row">送り: <span id="popup-dropoff">-</span></div>
   </div>
 </div>
 ```
 
 ---
 
-### 2.7 CSS設計
+### 2.2 HTML要素の説明
+
+#### トグルヘッダー
+
+```html
+<div class="daily-summary-header">
+  <h3>日別サマリー</h3>
+  <button 
+    class="toggle-summary-button" 
+    aria-label="日別サマリーを折りたたむ"
+    aria-expanded="true"
+  >
+    <span class="icon">▼</span>
+  </button>
+</div>
+```
+
+**属性**:
+- `aria-label`: 読み上げソフト対応
+- `aria-expanded`: 展開状態（true/false）
+
+**アイコン**:
+- 展開時: ▼
+- 折りたたみ時: ▶
+
+---
+
+#### サマリー内容
+
+```html
+<div id="daily-summary-content" class="daily-summary-content" data-visible="true">
+  <!-- ...テーブル -->
+</div>
+```
+
+**属性**:
+- `data-visible`: 表示状態（true/false）
+- `true`: 表示
+- `false`: 非表示
+
+---
+
+#### テーブル構造
+
+```html
+<table class="summary-table">
+  <tbody>
+    <tr class="summary-row kayoi-row">
+      <td class="label">通い</td>
+      <td class="cell" data-date="2025-11-01">
+        <span class="count">12</span>
+      </td>
+      <!-- ...他の日付 -->
+    </tr>
+    <!-- 泊まり行、訪問行 -->
+  </tbody>
+</table>
+```
+
+**重要**:
+- `<thead>` は使用しない（日付行がないため）
+- 3つの `<tr>` のみ（通い・泊まり・訪問）
+
+---
+
+## 3. CSS設計（v2.0）
+
+### 3.1 縦軸整列の設計（マスト要件）
 
 ```css
-/* ヘッダー */
-.summary-header {
+/**
+ * 縦軸整列の設計方針
+ * 
+ * カレンダーヘッダー、日別サマリー、メインコンテンツの
+ * 全てのセル幅を統一することで、縦軸を完璧に揃える
+ */
+
+/* 共通のセル幅定義 */
+:root {
+  --label-column-width: 80px;  /* ラベル列の幅 */
+  --date-cell-width: 40px;      /* 日付セルの幅 */
+}
+
+/* 日別サマリーのセル幅 */
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed; /* 重要: セル幅を均等に */
+}
+
+.summary-table .label {
+  width: var(--label-column-width);
+  background: #f5f5f5;
+  border-right: 2px solid #ddd;
+  padding: 8px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.summary-table .cell {
+  min-width: var(--date-cell-width);
+  width: var(--date-cell-width);
+  padding: 4px;
+  text-align: center;
+  border-right: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
+}
+```
+
+**重要なポイント**:
+1. **CSS変数を使用** (`--label-column-width`, `--date-cell-width`)
+2. **`table-layout: fixed`** を使用
+3. **カレンダーヘッダーと同じ幅**
+
+---
+
+### 3.2 コンテナのスタイル
+
+```css
+/* 日別サマリーコンテナ */
+.daily-summary-container {
+  position: sticky;
+  top: 50px; /* ヘッダー（50px）の下 */
+  z-index: 100;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* トグルヘッダー */
+.daily-summary-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
-  background-color: #f5f5f5;
+  padding: 8px 16px;
+  background: #f5f5f5;
   border-bottom: 1px solid #ddd;
 }
 
-.summary-header h4 {
+.daily-summary-header h3 {
   margin: 0;
   font-size: 14px;
+  font-weight: 600;
+  color: #333;
 }
 
-.toggle-button {
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 4px 8px;
+.toggle-summary-button {
+  background: none;
+  border: none;
   cursor: pointer;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.toggle-button:hover {
-  background: #f0f0f0;
-}
-
-/* 行の高さ */
-.summary-row {
-  display: flex;
-  border-bottom: 1px solid #eee;
-}
-
-.summary-row.main-row {
-  height: 24px;
-  font-weight: bold;
-  background-color: #fafafa;
-}
-
-.summary-row.sub-row {
-  height: 16px;
-  font-size: 11px;
-  color: #666;
-}
-
-/* ラベル */
-.summary-row .label {
-  width: 60px;
   padding: 4px 8px;
-  text-align: left;
-  background-color: #f5f5f5;
-  border-right: 1px solid #ddd;
+  font-size: 12px;
+  color: #666;
+  transition: transform 0.2s ease;
 }
 
-/* カウントセル */
-.count-cell {
-  flex: 1;
-  text-align: center;
-  padding: 4px;
-  border-right: 1px solid #eee;
+.toggle-summary-button:hover {
+  background: #e0e0e0;
+  border-radius: 4px;
+}
+
+/* アイコンの回転 */
+.toggle-summary-button[aria-expanded="false"] .icon {
+  transform: rotate(-90deg);
+}
+```
+
+---
+
+### 3.3 表示/非表示の切り替え
+
+```css
+/* サマリー内容 */
+.daily-summary-content {
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.daily-summary-content[data-visible="true"] {
+  max-height: 200px; /* 3行分の高さ */
+}
+
+.daily-summary-content[data-visible="false"] {
+  max-height: 0;
+}
+```
+
+---
+
+### 3.4 色分け表示
+
+```css
+/* 数字のスタイル */
+.summary-table .count {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+/* 色分けは動的に設定（style属性） */
+/* 例: 
+   - 余裕あり: #0099ff（青）
+   - 適度: #99cc00（緑）
+   - やや混雑: #ffff00（黄）
+   - 混雑: #ff9900（オレンジ）
+   - 限界: #ff0000（赤）
+*/
+```
+
+**色分けの基準**（Phase 1）:
+
+| 色 | 通い | 泊まり | 訪問 | 意味 |
+|----|------|--------|------|------|
+| 🔵 青 | 0-5人 | 0-3人 | 0-5回 | 余裕あり |
+| 🟢 緑 | 6-10人 | 4-6人 | 6-10回 | 適度 |
+| 🟡 黄 | 11-13人 | 7-8人 | 11-15回 | やや混雑 |
+| 🟠 オレンジ | 14-15人 | 9人 | 16-20回 | 混雑 |
+| 🔴 赤 | 16人以上 | 10人以上 | 21回以上 | 限界（定員超過） |
+
+---
+
+### 3.5 ホバーエフェクト
+
+```css
+/* セルのホバー */
+.summary-table .cell:hover {
+  outline: 2px solid #1976d2;
+  outline-offset: -1px;
+  cursor: pointer;
+  z-index: 10;
   position: relative;
 }
 
-.count-cell.hover-trigger {
-  cursor: pointer;
-}
-
-.count-cell.hover-trigger:hover {
-  background-color: rgba(0, 123, 255, 0.05);
-}
-
-/* ホバーポップアップ */
-.hover-popup {
-  position: absolute;
-  background: white;
-  border: 1px solid #ddd;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  z-index: 1000;
-  min-width: 120px;
-}
-
-.popup-row {
-  margin: 2px 0;
-  display: flex;
-  justify-content: space-between;
-}
-
-.popup-divider {
-  border-top: 1px solid #eee;
-  margin: 4px 0;
-}
-
-/* 定員超過の色分け */
-.count-cell.over-capacity {
-  background-color: #ffebee;
-  color: #c62828;
-  font-weight: bold;
-}
-
-.count-cell.at-capacity {
-  background-color: #fff9c4;
-  color: #f57c00;
-}
-
-/* モードの切り替え */
-.summary-rows.simple-mode {
-  display: block;
-}
-
-.summary-rows.detail-mode {
-  display: none;
-}
-
-/* 詳細モードがアクティブの時 */
-.kayoi-summary.detail-active .simple-mode {
-  display: none;
-}
-
-.kayoi-summary.detail-active .detail-mode {
-  display: block;
+/* ホバー時に縦軸の列を強調（Phase 2） */
+.summary-table .cell.hovered-column {
+  background-color: rgba(25, 118, 210, 0.1);
 }
 ```
 
 ---
 
-### 2.8 JavaScript処理
+## 4. JavaScript設計
 
-#### トグルボタン
+### 4.1 DailySummaryServiceクラス
 
 ```javascript
-// トグルボタンの初期化
-const toggleButton = document.getElementById('toggle-detail');
-const kayoiSummary = document.querySelector('.kayoi-summary');
-
-// localStorageから前回の状態を復元
-const isDetailMode = localStorage.getItem('kayoi-summary-mode') === 'detail';
-if (isDetailMode) {
-  kayoiSummary.classList.add('detail-active');
-  toggleButton.querySelector('.label').textContent = '合算表示';
-  toggleButton.querySelector('.icon').textContent = '▲';
-}
-
-// クリックでモード切り替え
-toggleButton.addEventListener('click', () => {
-  const isDetail = kayoiSummary.classList.toggle('detail-active');
-  
-  // ボタンのラベルとアイコンを更新
-  if (isDetail) {
-    toggleButton.querySelector('.label').textContent = '合算表示';
-    toggleButton.querySelector('.icon').textContent = '▲';
-    localStorage.setItem('kayoi-summary-mode', 'detail');
-  } else {
-    toggleButton.querySelector('.label').textContent = '詳細表示';
-    toggleButton.querySelector('.icon').textContent = '▼';
-    localStorage.setItem('kayoi-summary-mode', 'simple');
+/**
+ * 日別サマリーのビジネスロジック
+ */
+class DailySummaryService {
+  constructor() {
+    this.currentYear = null;
+    this.currentMonth = null;
   }
-});
-```
-
-#### ホバーポップアップ
-
-```javascript
-// ホバーポップアップの初期化
-const hoverTriggers = document.querySelectorAll('.hover-trigger');
-const hoverPopup = document.querySelector('.hover-popup');
-
-hoverTriggers.forEach(cell => {
-  cell.addEventListener('mouseenter', (e) => {
-    // data属性から値を取得
-    const kayoi = cell.dataset.kayoi;
-    const zenhan = cell.dataset.zenhan;
-    const kohan = cell.dataset.kohan;
-    const pickup = cell.dataset.pickup;
-    const dropoff = cell.dataset.dropoff;
-    
-    // ポップアップに値を設定
-    document.getElementById('popup-kayoi').textContent = kayoi;
-    document.getElementById('popup-zenhan').textContent = zenhan;
-    document.getElementById('popup-kohan').textContent = kohan;
-    document.getElementById('popup-pickup').textContent = pickup;
-    document.getElementById('popup-dropoff').textContent = dropoff;
-    
-    // ポップアップの位置を計算
-    const rect = cell.getBoundingClientRect();
-    hoverPopup.style.left = `${rect.left}px`;
-    hoverPopup.style.top = `${rect.bottom + 5}px`;
-    
-    // 表示
-    hoverPopup.style.display = 'block';
-  });
   
-  cell.addEventListener('mouseleave', () => {
-    hoverPopup.style.display = 'none';
-  });
-});
-```
-
----
-
-## 3. 泊まりセクションの日別サマリー
-
-### 3.1 表示内容（4行）
-
-```
-泊まり（ショートステイ）
-┌─────────────────────────────────────┐
-│人数  7   8   9   7   6  ...  8     │ ← 24px
-├─────────────────────────────────────┤
-│重度  2   3   4   2   1  ...  3     │ ← 16px
-│中度  3   3   3   3   3  ...  3     │ ← 16px
-│軽度  2   2   2   2   2  ...  2     │ ← 16px
-└─────────────────────────────────────┘
-```
-
-**4行の意味**:
-1. **人数**: 泊まり人数（定員9人）
-2. **重度**: 介助量が重度の人数
-3. **中度**: 介助量が中度の人数
-4. **軽度**: 介助量が軽度の人数
-
-**業務上の価値**:
-- **夜勤体制の判断**: 重度が多い日は夜勤の負担が大きい
-- **職員配置の調整**: 介助量に応じて職員を配置
-- **新規受入の判断**: 「重度が多い日は新規受入を控える」などの判断材料
-
-**縦幅**: 約72px
-
----
-
-### 3.2 HTML構造
-
-```html
-<div class="daily-summary tomari-summary">
-  <div class="summary-header">
-    <h4>泊まり（ショートステイ）</h4>
-  </div>
-  
-  <div class="summary-rows">
-    <div class="summary-row main-row">
-      <span class="label">人数</span>
-      <span class="count-cell">7</span>
-      <span class="count-cell">8</span>
-      <!-- ... 他の日 -->
-    </div>
-    <div class="summary-row sub-row">
-      <span class="label">重度</span>
-      <span class="count-cell">2</span>
-      <span class="count-cell">3</span>
-      <!-- ... 他の日 -->
-    </div>
-    <div class="summary-row sub-row">
-      <span class="label">中度</span>
-      <span class="count-cell">3</span>
-      <span class="count-cell">3</span>
-      <!-- ... 他の日 -->
-    </div>
-    <div class="summary-row sub-row">
-      <span class="label">軽度</span>
-      <span class="count-cell">2</span>
-      <span class="count-cell">2</span>
-      <!-- ... 他の日 -->
-    </div>
-  </div>
-</div>
-```
-
----
-
-### 3.3 データ取得方法
-
-#### 介助量の定義
-
-介助量（軽度・中度・重度）は **User マスタ**で管理（L1_データ_共通データ構造.md で定義予定）
-
-```javascript
-class User {
-  constructor(data) {
-    // ...
-    this.careLevel = data.careLevel; // "軽度" | "中度" | "重度"
-  }
-}
-```
-
-#### 計算ロジック
-
-```javascript
-function calculateTomariSummary(reservations, masterData, date) {
-  // その日に泊まっている利用者を抽出
-  const dateReservations = reservations.filter(r => {
-    const checkIn = new Date(r.checkInDate);
-    const checkOut = new Date(r.checkOutDate);
-    const target = new Date(date);
-    return target >= checkIn && target <= checkOut;
-  });
-  
-  let keiCount = 0;
-  let chuCount = 0;
-  let juCount = 0;
-  
-  dateReservations.forEach(reservation => {
-    const user = masterData.getUserById(reservation.userId);
-    if (!user) return;
+  /**
+   * 月の日別サマリーを計算
+   * @param {number} year - 年
+   * @param {number} month - 月
+   * @param {Array} kayoiData - 通いデータ
+   * @param {Array} tomariData - 泊まりデータ
+   * @param {Array} houmonData - 訪問データ
+   * @returns {Object} - 日別サマリーデータ
+   */
+  calculateMonthlySummary(year, month, kayoiData, tomariData, houmonData) {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const summary = {};
     
-    switch (user.careLevel) {
-      case "軽度":
-        keiCount++;
-        break;
-      case "中度":
-        chuCount++;
-        break;
-      case "重度":
-        juCount++;
-        break;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      
+      summary[dateStr] = {
+        kayoi: this.countKayoi(dateStr, kayoiData),
+        tomari: this.countTomari(dateStr, tomariData),
+        houmon: this.countHoumon(dateStr, houmonData)
+      };
     }
-  });
+    
+    return summary;
+  }
   
-  return {
-    total: dateReservations.length,
-    kei: keiCount,
-    chu: chuCount,
-    ju: juCount
-  };
+  /**
+   * 通い利用者数をカウント
+   */
+  countKayoi(dateStr, kayoiData) {
+    return kayoiData.filter(schedule => schedule.date === dateStr).length;
+  }
+  
+  /**
+   * 泊まり利用者数をカウント
+   */
+  countTomari(dateStr, tomariData) {
+    return tomariData.filter(schedule => {
+      const checkIn = schedule.checkInDate;
+      const checkOut = schedule.checkOutDate;
+      return dateStr >= checkIn && dateStr < checkOut;
+    }).length;
+  }
+  
+  /**
+   * 訪問回数をカウント
+   */
+  countHoumon(dateStr, houmonData) {
+    const visits = houmonData.filter(schedule => schedule.date === dateStr);
+    return visits.reduce((sum, schedule) => sum + (schedule.count || 1), 0);
+  }
+  
+  /**
+   * 色分けを計算
+   * @param {string} service - サービス種別（'kayoi'/'tomari'/'houmon'）
+   * @param {number} count - 利用者数/回数
+   * @returns {string} - 背景色（16進数）
+   */
+  calculateColor(service, count) {
+    const thresholds = {
+      kayoi: [
+        { max: 5, color: '#0099ff' },   // 青
+        { max: 10, color: '#99cc00' },  // 緑
+        { max: 13, color: '#ffff00' },  // 黄
+        { max: 15, color: '#ff9900' },  // オレンジ
+        { max: Infinity, color: '#ff0000' } // 赤
+      ],
+      tomari: [
+        { max: 3, color: '#0099ff' },
+        { max: 6, color: '#99cc00' },
+        { max: 8, color: '#ffff00' },
+        { max: 9, color: '#ff9900' },
+        { max: Infinity, color: '#ff0000' }
+      ],
+      houmon: [
+        { max: 5, color: '#0099ff' },
+        { max: 10, color: '#99cc00' },
+        { max: 15, color: '#ffff00' },
+        { max: 20, color: '#ff9900' },
+        { max: Infinity, color: '#ff0000' }
+      ]
+    };
+    
+    const serviceTh = thresholds[service];
+    for (let i = 0; i < serviceTh.length; i++) {
+      if (count <= serviceTh[i].max) {
+        return serviceTh[i].color;
+      }
+    }
+    
+    return '#ffffff'; // デフォルト（白）
+  }
 }
+
+// グローバルインスタンス
+const dailySummaryService = new DailySummaryService();
 ```
 
 ---
 
-### 3.4 色分けルール
+### 4.2 DailySummaryUIクラス
+
+```javascript
+/**
+ * 日別サマリーのUI管理
+ */
+class DailySummaryUI {
+  constructor() {
+    this.container = document.getElementById('daily-summary-container');
+    this.content = document.getElementById('daily-summary-content');
+    this.toggleButton = this.container.querySelector('.toggle-summary-button');
+    this.summaryTable = this.container.querySelector('.summary-table');
+    
+    this.initializeEventListeners();
+  }
+  
+  initializeEventListeners() {
+    // トグルボタン
+    this.toggleButton.addEventListener('click', () => {
+      this.toggleVisibility();
+    });
+    
+    // 月切り替えイベント
+    document.addEventListener('monthChanged', (e) => {
+      const { year, month } = e.detail;
+      this.updateSummary(year, month);
+    });
+  }
+  
+  /**
+   * 表示/非表示を切り替え
+   */
+  toggleVisibility() {
+    const isVisible = this.content.getAttribute('data-visible') === 'true';
+    const newState = !isVisible;
+    
+    this.content.setAttribute('data-visible', newState);
+    this.toggleButton.setAttribute('aria-expanded', newState);
+    
+    // ローカルストレージに保存
+    localStorage.setItem('dailySummaryVisible', newState);
+  }
+  
+  /**
+   * サマリーを更新
+   * @param {number} year - 年
+   * @param {number} month - 月
+   */
+  updateSummary(year, month) {
+    // データを取得
+    const kayoiData = masterData.kayoiSchedules.getMonthData(year, month);
+    const tomariData = masterData.tomariSchedules.getMonthData(year, month);
+    const houmonData = masterData.houmonSchedules.getMonthData(year, month);
+    
+    // サマリーを計算
+    const summary = dailySummaryService.calculateMonthlySummary(
+      year, month, kayoiData, tomariData, houmonData
+    );
+    
+    // テーブルを描画
+    this.renderTable(year, month, summary);
+  }
+  
+  /**
+   * テーブルを描画
+   */
+  renderTable(year, month, summary) {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    
+    // 各行を取得
+    const kayoiRow = this.summaryTable.querySelector('.kayoi-row');
+    const tomariRow = this.summaryTable.querySelector('.tomari-row');
+    const houmonRow = this.summaryTable.querySelector('.houmon-row');
+    
+    // 既存のセルをクリア（ラベル以外）
+    [kayoiRow, tomariRow, houmonRow].forEach(row => {
+      const cells = row.querySelectorAll('.cell');
+      cells.forEach(cell => cell.remove());
+    });
+    
+    // 各日付のセルを生成
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const daySummary = summary[dateStr];
+      
+      // 通い行のセル
+      const kayoiCell = this.createCell(dateStr, daySummary.kayoi, 'kayoi');
+      kayoiRow.appendChild(kayoiCell);
+      
+      // 泊まり行のセル
+      const tomariCell = this.createCell(dateStr, daySummary.tomari, 'tomari');
+      tomariRow.appendChild(tomariCell);
+      
+      // 訪問行のセル
+      const houmonCell = this.createCell(dateStr, daySummary.houmon, 'houmon');
+      houmonRow.appendChild(houmonCell);
+    }
+  }
+  
+  /**
+   * セルを作成
+   * @param {string} dateStr - 日付文字列
+   * @param {number} count - 利用者数/回数
+   * @param {string} service - サービス種別
+   * @returns {HTMLElement} - セル要素
+   */
+  createCell(dateStr, count, service) {
+    const cell = document.createElement('td');
+    cell.className = 'cell';
+    cell.setAttribute('data-date', dateStr);
+    
+    // 色分けを計算
+    const bgColor = dailySummaryService.calculateColor(service, count);
+    cell.style.backgroundColor = bgColor;
+    
+    // 数字を表示
+    const countSpan = document.createElement('span');
+    countSpan.className = 'count';
+    countSpan.textContent = count;
+    cell.appendChild(countSpan);
+    
+    // ホバーイベント（Phase 2）
+    cell.addEventListener('mouseenter', () => {
+      this.highlightColumn(dateStr);
+    });
+    
+    cell.addEventListener('mouseleave', () => {
+      this.unhighlightColumn(dateStr);
+    });
+    
+    return cell;
+  }
+  
+  /**
+   * 列を強調（Phase 2）
+   */
+  highlightColumn(dateStr) {
+    const cells = this.summaryTable.querySelectorAll(`[data-date="${dateStr}"]`);
+    cells.forEach(cell => cell.classList.add('hovered-column'));
+  }
+  
+  /**
+   * 列の強調を解除（Phase 2）
+   */
+  unhighlightColumn(dateStr) {
+    const cells = this.summaryTable.querySelectorAll(`[data-date="${dateStr}"]`);
+    cells.forEach(cell => cell.classList.remove('hovered-column'));
+  }
+}
+
+// グローバルインスタンス
+const dailySummaryUI = new DailySummaryUI();
+```
+
+---
+
+## 5. カレンダーヘッダーとの連動
+
+### 5.1 縦軸整列の保証
 
 ```css
-/* 泊まり人数の色分け */
-.tomari-summary .count-cell.over-capacity {
-  /* 定員超過（10人以上） */
-  background-color: #ffebee;
-  color: #c62828;
-  font-weight: bold;
+/**
+ * カレンダーヘッダーと日別サマリーの縦軸を揃える
+ */
+
+/* 共通のセル幅（CSS変数） */
+:root {
+  --label-column-width: 80px;
+  --date-cell-width: 40px;
 }
 
-.tomari-summary .count-cell.at-capacity {
-  /* 定員ちょうど（9人） */
-  background-color: #fff9c4;
-  color: #f57c00;
+/* 日別サマリー */
+.summary-table .label {
+  width: var(--label-column-width);
 }
 
-.tomari-summary .count-cell.near-capacity {
-  /* 定員近い（8人） */
-  background-color: #fff9c4;
-  color: #f57c00;
-  opacity: 0.7;
+.summary-table .cell {
+  min-width: var(--date-cell-width);
+  width: var(--date-cell-width);
 }
 
-/* 介助量の色分け（重度が多い日） */
-.tomari-summary .sub-row.ju-many {
-  /* 重度が5人以上 */
-  background-color: #ffe0e0;
+/* カレンダーヘッダー */
+.calendar-ruler-table .label-cell {
+  width: var(--label-column-width);
+}
+
+.calendar-ruler-table .date-cell,
+.calendar-ruler-table .weekday-cell {
+  min-width: var(--date-cell-width);
+  width: var(--date-cell-width);
+}
+
+/* 両方ともtable-layout: fixedを使用 */
+.summary-table,
+.calendar-ruler-table {
+  table-layout: fixed;
 }
 ```
 
 ---
 
-## 4. 訪問セクションの日別サマリー
-
-### 4.1 表示内容（1行）
-
-```
-訪問（訪問介護）
-┌─────────────────────────────────────┐
-│回数 25  23  24  26  22 ... 24      │ ← 24px
-└─────────────────────────────────────┘
-```
-
-**1行の意味**:
-1. **回数**: 訪問回数（定員なし）
-
-**Phase 2以降の拡張**:
-- 職員別の訪問回数を追加
-- 職員の稼働状況を可視化
-
-**縦幅**: 約24px
-
----
-
-### 4.2 HTML構造
-
-```html
-<div class="daily-summary houmon-summary">
-  <div class="summary-header">
-    <h4>訪問（訪問介護）</h4>
-  </div>
-  
-  <div class="summary-rows">
-    <div class="summary-row main-row">
-      <span class="label">回数</span>
-      <span class="count-cell">25</span>
-      <span class="count-cell">23</span>
-      <!-- ... 他の日 -->
-    </div>
-  </div>
-</div>
-```
-
----
-
-### 4.3 計算ロジック
+### 5.2 月切り替え時の同期
 
 ```javascript
-function calculateHoumonSummary(schedules, date) {
-  // その日の訪問予定をカウント
-  const count = schedules.filter(s => s.date === date).length;
+/**
+ * 月切り替え時の動作
+ */
+
+// CalendarControllerが月切り替えイベントを発火
+document.dispatchEvent(new CustomEvent('monthChanged', {
+  detail: { year: 2025, month: 11 }
+}));
+
+// DailySummaryUIが受信して更新
+document.addEventListener('monthChanged', (e) => {
+  const { year, month } = e.detail;
+  dailySummaryUI.updateSummary(year, month);
+});
+
+// CalendarHeaderRulerも受信して更新
+document.addEventListener('monthChanged', (e) => {
+  const { year, month } = e.detail;
+  calendarHeaderRuler.renderCalendar(year, month);
+});
+```
+
+**重要**:
+- 日別サマリーとカレンダーヘッダーは同じイベントで更新
+- 常に同期が保たれる
+
+---
+
+## 6. トグル機能の詳細設計
+
+### 6.1 初期状態
+
+```javascript
+/**
+ * ページロード時の処理
+ */
+window.addEventListener('DOMContentLoaded', () => {
+  // ローカルストレージから状態を復元
+  const savedState = localStorage.getItem('dailySummaryVisible');
+  const isVisible = savedState === null ? true : (savedState === 'true');
   
-  return {
-    count: count
-  };
-}
-```
-
----
-
-### 4.4 Phase 2以降の拡張
-
-#### 職員別の訪問回数
-
-```
-訪問（訪問介護）
-┌─────────────────────────────────────┐
-│回数 25  23  24  26  22 ... 24      │
-├─────────────────────────────────────┤
-│佐藤  8   7   8   9   7 ...  8      │ ← 職員別
-│鈴木  9   8   8   9   8 ...  9      │
-│田中  8   8   8   8   7 ...  7      │
-└─────────────────────────────────────┘
-```
-
-**業務上の価値**:
-- 職員の稼働状況を可視化
-- 特定の職員に負荷が集中していないか確認
-- 新規訪問を誰に割り当てるか判断
-
----
-
-## 5. 全体タブの日別サマリー
-
-### 5.1 表示内容（3サービス統合）
-
-```
-全体
-┌─────────────────────────────────────┐
-│      1   2   3   4   5  ... 30     │
-│通い  12  14  13  15  14 ... 12     │
-│泊まり 7   8   9   7   6 ...  8     │
-│訪問  25  23  24  26  22 ... 24     │
-└─────────────────────────────────────┘
-```
-
-**3行の意味**:
-- 3サービスの人数を一覧
-- 月全体の稼働状況を俯瞰
-
-**縦幅**: 約72px（3行 × 24px）
-
----
-
-### 5.2 HTML構造
-
-```html
-<div class="daily-summary integrated-summary">
-  <div class="summary-header">
-    <h4>全体</h4>
-  </div>
+  const content = document.getElementById('daily-summary-content');
+  const toggleButton = document.querySelector('.toggle-summary-button');
   
-  <div class="summary-rows">
-    <div class="summary-row main-row">
-      <span class="label">通い</span>
-      <span class="count-cell">12</span>
-      <span class="count-cell">14</span>
-      <!-- ... 他の日 -->
-    </div>
-    <div class="summary-row main-row">
-      <span class="label">泊まり</span>
-      <span class="count-cell">7</span>
-      <span class="count-cell">8</span>
-      <!-- ... 他の日 -->
-    </div>
-    <div class="summary-row main-row">
-      <span class="label">訪問</span>
-      <span class="count-cell">25</span>
-      <span class="count-cell">23</span>
-      <!-- ... 他の日 -->
-    </div>
-  </div>
-</div>
+  content.setAttribute('data-visible', isVisible);
+  toggleButton.setAttribute('aria-expanded', isVisible);
+});
 ```
+
+**デフォルト**: 表示（`data-visible="true"`）
 
 ---
 
-## 6. 色分けルール（全セクション共通）
-
-### 6.1 定員状況による色分け
-
-#### 通いセクション
+### 6.2 アニメーション
 
 ```css
-/* 定員超過（16人以上） */
-.kayoi-summary .over-capacity {
-  background-color: #ffebee;
-  color: #c62828;
-  font-weight: bold;
+/* トグルアニメーション */
+.daily-summary-content {
+  overflow: hidden;
+  transition: max-height 0.3s ease;
 }
 
-/* 定員ちょうど（15人） */
-.kayoi-summary .at-capacity {
-  background-color: #fff9c4;
-  color: #f57c00;
+.daily-summary-content[data-visible="true"] {
+  max-height: 200px; /* 3行分 */
 }
 
-/* 定員近い（14人） */
-.kayoi-summary .near-capacity {
-  background-color: #fffde7;
-  color: #f57c00;
-  opacity: 0.7;
-}
-```
-
-#### 泊まりセクション
-
-```css
-/* 定員超過（10人以上） */
-.tomari-summary .over-capacity {
-  background-color: #ffebee;
-  color: #c62828;
-  font-weight: bold;
+.daily-summary-content[data-visible="false"] {
+  max-height: 0;
 }
 
-/* 定員ちょうど（9人） */
-.tomari-summary .at-capacity {
-  background-color: #fff9c4;
-  color: #f57c00;
-}
-```
-
-#### 訪問セクション
-
-訪問は定員がないため、回数による色分けは行わない（Phase 1）
-
----
-
-### 6.2 曜日による色分け
-
-```css
-/* 土曜日 */
-.count-cell[data-day="土"] {
-  background-color: rgba(33, 150, 243, 0.1);
+/* アイコンの回転 */
+.toggle-summary-button .icon {
+  transition: transform 0.2s ease;
 }
 
-/* 日曜日・祝日 */
-.count-cell[data-day="日"],
-.count-cell[data-holiday="true"] {
-  background-color: rgba(244, 67, 54, 0.1);
+.toggle-summary-button[aria-expanded="false"] .icon {
+  transform: rotate(-90deg);
 }
 ```
 
 ---
 
-## 7. 業務シナリオ
+## 7. Phase 2での拡張
 
-### シナリオ1: 電話で空き状況を即答
-
-```
-電話: 「今月、通いの空きはありますか?」
-
-↓
-
-【操作】通いタブを開く（合算表示）
-
-↓
-
-【確認】パッと見て、数字が少ない日を探す
-→ 3日が13人（比較的少ない）
-
-↓
-
-【操作】3日のセルにマウスホバー
-
-↓
-
-【表示】ポップアップ:
-┌─────────────┐
-│ 通い: 13     │
-│ 前半: 13     │
-│ 後半: 11     │
-│ ─────────── │
-│ 迎え: 9      │
-│ 送り: 10     │
-└─────────────┘
-
-↓
-
-【回答】「3日の後半なら空いています。送迎も可能です。」
-```
-
-**所要時間**: 約10秒
-
----
-
-### シナリオ2: 新規利用者の予定を組む
-
-```
-相談: 「週2回、通いを利用したい」
-
-↓
-
-【操作】[詳細表示]ボタンをクリック
-
-↓
-
-【表示】前半・後半の2行表示
-
-┌─────────────────────────────────────┐
-│通い 12  14  13  15  16 ... 12      │
-├─────────────────────────────────────┤
-│前半 12  14  13  15  15 ... 12      │
-│後半 10  12  11  14  16 ... 10      │
-└─────────────────────────────────────┘
-
-↓
-
-【確認】前半が空いている曜日を探す
-→ 月曜（12人）、水曜（13人）が比較的空いている
-
-↓
-
-【提案】「月曜と水曜の午前はいかがですか？」
-```
-
----
-
-### シナリオ3: 送迎車両の配車計画
-
-```
-13日の送迎計画を立てる
-
-↓
-
-【確認】13日の日別サマリー:
-通い: 15人
-迎え: 12人 ← 3人は家族送迎
-送り: 13人 ← 2人は家族送迎
-
-↓
-
-【計算】送迎車両（定員8人）の必要台数:
-迎え: 12人 ÷ 8 = 2台必要
-送り: 13人 ÷ 8 = 2台必要
-
-↓
-
-【判断】送迎職員を2名配置
-```
-
----
-
-### シナリオ4: 送迎満車の場合の受入判断
-
-```
-電話: 「来週の月曜、通いを利用したい。送迎お願いできますか？」
-
-↓
-
-【確認】月曜の日別サマリー:
-通い: 14/15人 ← あと1人入れる
-迎え: 15人 ← 送迎車が満車（16人乗り）
-
-↓
-
-【判断】通いは空いているが、送迎が満車
-
-↓
-
-【回答】「通いは空いていますが、送迎が満車です。
-        ご家族の送迎は可能でしょうか？」
-
-↓
-
-【提案】家族送迎なら受入可能
-```
-
----
-
-## 8. 実装の優先順位
-
-### Phase 1（最優先）
-
-1. **日別サマリーの基本実装**
-   - 通いセクション: 通い行のみ（合算表示）
-   - 泊まりセクション: 人数行のみ
-   - 訪問セクション: 回数行のみ
-
-2. **ホバーポップアップ**
-   - 通いセクションのみ実装
-   - 前半・後半・迎え・送りを表示
-
-3. **詳細表示モード**
-   - トグルボタンの実装
-   - 前半・後半の2行表示
-
----
-
-### Phase 1.5（追加機能）
-
-4. **送迎量の追加**
-   - 迎え・送り行の追加
-   - データ構造の拡張（pickupType, dropoffType）
-   - 送迎タイプの入力UI
-
-5. **泊まりの介助量**
-   - 重度・中度・軽度の3行追加
-   - 介助量の計算ロジック
-
----
-
-### Phase 2以降
-
-6. **訪問の職員別表示**
-   - 職員別の訪問回数
-   - 職員稼働状況の可視化
-
-7. **全体タブの統合ビュー**
-   - 3サービスの統合表示
-   - 利用者軸での表示
-
----
-
-## 9. テスト仕様
-
-### 9.1 単体テスト
-
-#### 通いセクション
+### 7.1 高度な色分け
 
 ```javascript
-// 前半・後半の最大値計算
-test('通い人数は前半と後半の最大値', () => {
-  const schedules = [
-    { userId: 'u1', date: '2025-11-25', section: '前半' },
-    { userId: 'u2', date: '2025-11-25', section: '前半' },
-    { userId: 'u3', date: '2025-11-25', section: '後半' },
-    { userId: 'u4', date: '2025-11-25', section: '終日' }
-  ];
+/**
+ * Phase 2: 送迎量・介助量を考慮した色分け
+ */
+class DailySummaryServicePhase2 extends DailySummaryService {
+  /**
+   * 通いの色分け（送迎量考慮）
+   */
+  calculateKayoiColor(dateStr, kayoiData) {
+    const schedules = kayoiData.filter(s => s.date === dateStr);
+    const count = schedules.length;
+    
+    // 送迎利用者数をカウント
+    const pickupCount = schedules.filter(s => s.pickup === 'staff').length;
+    
+    // 基本の色を取得
+    let color = this.calculateColor('kayoi', count);
+    
+    // 送迎が多い場合は色を濃くする
+    if (pickupCount > count * 0.7) {
+      color = this.darkenColor(color, 20);
+    }
+    
+    return color;
+  }
   
-  const summary = calculateDailySummary(schedules, '2025-11-25');
-  
-  expect(summary.zenhan).toBe(3); // 前半 + 終日
-  expect(summary.kohan).toBe(2);  // 後半 + 終日
-  expect(summary.kayoi).toBe(3);  // max(3, 2)
-});
-
-// 送迎人数の計算
-test('送迎人数は職員送迎のみカウント', () => {
-  const schedules = [
-    { userId: 'u1', date: '2025-11-25', section: '終日', 
-      pickupType: 'staff', dropoffType: 'staff' },
-    { userId: 'u2', date: '2025-11-25', section: '終日', 
-      pickupType: 'family', dropoffType: 'staff' }
-  ];
-  
-  const summary = calculateDailySummary(schedules, '2025-11-25');
-  
-  expect(summary.pickup).toBe(1);  // u1のみ
-  expect(summary.dropoff).toBe(2); // u1, u2
-});
-```
-
-#### 泊まりセクション
-
-```javascript
-// 介助量の集計
-test('介助量を正しくカウント', () => {
-  const reservations = [
-    { userId: 'u1', checkInDate: '2025-11-25', checkOutDate: '2025-11-27' },
-    { userId: 'u2', checkInDate: '2025-11-24', checkOutDate: '2025-11-26' }
-  ];
-  
-  const users = [
-    { userId: 'u1', name: '山田', careLevel: '重度' },
-    { userId: 'u2', name: '田中', careLevel: '中度' }
-  ];
-  
-  const masterData = { getUserById: (id) => users.find(u => u.userId === id) };
-  const summary = calculateTomariSummary(reservations, masterData, '2025-11-25');
-  
-  expect(summary.total).toBe(2);
-  expect(summary.ju).toBe(1);  // 重度: 山田
-  expect(summary.chu).toBe(1); // 中度: 田中
-  expect(summary.kei).toBe(0);
-});
+  /**
+   * 色を濃くする
+   */
+  darkenColor(hex, percent) {
+    // 省略（実装時に詳細化）
+  }
+}
 ```
 
 ---
 
-### 9.2 統合テスト
-
-#### ホバーポップアップ
+### 7.2 ホバーポップアップ
 
 ```javascript
-test('ホバー時にポップアップが表示される', () => {
-  const cell = document.querySelector('.count-cell[data-date="2025-11-25"]');
-  const popup = document.querySelector('.hover-popup');
+/**
+ * Phase 2: ホバー時にポップアップ表示
+ */
+class DailySummaryUIPhase2 extends DailySummaryUI {
+  createCell(dateStr, count, service) {
+    const cell = super.createCell(dateStr, count, service);
+    
+    // ポップアップを追加
+    cell.addEventListener('mouseenter', (e) => {
+      this.showPopup(e.target, dateStr, service);
+    });
+    
+    cell.addEventListener('mouseleave', () => {
+      this.hidePopup();
+    });
+    
+    return cell;
+  }
   
-  // マウスホバー
-  cell.dispatchEvent(new MouseEvent('mouseenter'));
+  /**
+   * ポップアップを表示
+   */
+  showPopup(target, dateStr, service) {
+    // 詳細情報を取得
+    const details = this.getDetails(dateStr, service);
+    
+    // ポップアップを作成
+    const popup = document.createElement('div');
+    popup.className = 'summary-popup';
+    popup.innerHTML = `
+      <div class="popup-header">${dateStr}</div>
+      <div class="popup-body">
+        ${details}
+      </div>
+    `;
+    
+    // 位置を調整
+    const rect = target.getBoundingClientRect();
+    popup.style.left = `${rect.left}px`;
+    popup.style.top = `${rect.bottom + 5}px`;
+    
+    document.body.appendChild(popup);
+    this.currentPopup = popup;
+  }
   
-  // ポップアップが表示される
-  expect(popup.style.display).toBe('block');
+  /**
+   * ポップアップを非表示
+   */
+  hidePopup() {
+    if (this.currentPopup) {
+      this.currentPopup.remove();
+      this.currentPopup = null;
+    }
+  }
   
-  // 値が正しく表示される
-  expect(document.getElementById('popup-kayoi').textContent).toBe('13');
-  expect(document.getElementById('popup-zenhan').textContent).toBe('13');
-  expect(document.getElementById('popup-kohan').textContent).toBe('11');
-  
-  // マウスを離す
-  cell.dispatchEvent(new MouseEvent('mouseleave'));
-  
-  // ポップアップが非表示になる
-  expect(popup.style.display).toBe('none');
-});
+  /**
+   * 詳細情報を取得
+   */
+  getDetails(dateStr, service) {
+    // 省略（実装時に詳細化）
+  }
+}
 ```
 
-#### トグルボタン
+---
 
-```javascript
-test('トグルボタンで詳細モードに切り替わる', () => {
-  const toggleButton = document.getElementById('toggle-detail');
-  const kayoiSummary = document.querySelector('.kayoi-summary');
-  
-  // 初期状態: 通常モード
-  expect(kayoiSummary.classList.contains('detail-active')).toBe(false);
-  expect(toggleButton.querySelector('.label').textContent).toBe('詳細表示');
-  
-  // クリック
-  toggleButton.click();
-  
-  // 詳細モードに切り替わる
-  expect(kayoiSummary.classList.contains('detail-active')).toBe(true);
-  expect(toggleButton.querySelector('.label').textContent).toBe('合算表示');
-  
-  // localStorageに保存される
-  expect(localStorage.getItem('kayoi-summary-mode')).toBe('detail');
-});
+## 8. テスト仕様
+
+### 8.1 機能テスト
+
+```
+✅ 必須テスト項目
+
+1. 表示テスト
+   - [ ] 3行（通い・泊まり・訪問）が表示される
+   - [ ] 日付行が表示されない
+   - [ ] カレンダーヘッダーと縦軸が揃っている
+
+2. 色分けテスト
+   - [ ] 通い: 0-5人で青、6-10人で緑、...
+   - [ ] 泊まり: 0-3人で青、4-6人で緑、...
+   - [ ] 訪問: 0-5回で青、6-10回で緑、...
+
+3. トグルテスト
+   - [ ] ▼ボタンでサマリーが折りたたまれる
+   - [ ] ▶ボタンでサマリーが展開される
+   - [ ] 状態がローカルストレージに保存される
+
+4. 月切り替えテスト
+   - [ ] 月切り替え時にサマリーが更新される
+   - [ ] カレンダーヘッダーと同期する
+
+5. 縦軸整列テスト
+   - [ ] 日別サマリーのセル幅 = カレンダーヘッダーのセル幅
+   - [ ] ラベル列の幅 = カレンダーヘッダーのラベル幅
+   - [ ] スクロール時にズレない
+```
+
+---
+
+### 8.2 パフォーマンステスト
+
+```
+✅ パフォーマンステスト項目
+
+1. 描画速度
+   - [ ] 月切り替え後、100ms以内にサマリーが更新される
+   - [ ] 31日分のセル生成が50ms以内に完了する
+
+2. メモリ使用量
+   - [ ] DOM要素数が適切（3行 × 31日 = 93セル以下）
+   - [ ] イベントリスナーが適切に解放される
+```
+
+---
+
+## 9. 実装チェックリスト
+
+### 9.1 Phase 1（必須）
+
+```
+✅ HTML
+- [ ] 日別サマリーコンテナが存在する
+- [ ] トグルヘッダーが存在する
+- [ ] 3行のテーブル構造が存在する
+- [ ] 日付行が存在しない（削除済み）
+
+✅ CSS
+- [ ] CSS変数（--label-column-width, --date-cell-width）が定義されている
+- [ ] table-layout: fixedが設定されている
+- [ ] カレンダーヘッダーと同じ幅が設定されている
+- [ ] sticky固定が動作する
+
+✅ JavaScript
+- [ ] DailySummaryServiceクラスが実装されている
+- [ ] DailySummaryUIクラスが実装されている
+- [ ] 色分けロジックが動作する
+- [ ] トグル機能が動作する
+- [ ] 月切り替えイベントを受信する
+
+✅ 縦軸整列
+- [ ] 日別サマリーとカレンダーヘッダーの縦軸が揃っている
+- [ ] ラベル列の幅が一致している
+- [ ] 日付セルの幅が一致している
+- [ ] スクロール時にズレない
+```
+
+---
+
+### 9.2 Phase 2（拡張）
+
+```
+⏭️ Phase 2で実装
+
+- [ ] 送迎量を考慮した色分け
+- [ ] 介助量を考慮した色分け
+- [ ] ホバーポップアップ
+- [ ] クリックでその日にジャンプ
+- [ ] 縦軸の列を強調
 ```
 
 ---
 
 ## 10. まとめ
 
-### 10.1 このドキュメントで定義したこと
+### 10.1 v2.0で定義したこと
 
 ```
-✅ 定義したこと
-├─ 日別サマリーの目的と役割
-├─ 各セクション別の表示内容（通い・泊まり・訪問・全体）
-├─ HTML構造
-├─ CSS設計
-├─ JavaScript処理（トグル、ホバー）
-├─ データ取得ロジック
-├─ 色分けルール
-├─ 業務シナリオ
-├─ 実装の優先順位
-└─ テスト仕様
+✅ v2.0で定義したこと
+├─ 日付行の削除（4行 → 3行）
+├─ カレンダーヘッダーとの連動
+├─ 縦軸整列の設計（マスト要件）
+├─ CSS変数による統一
+├─ 色分け表示の仕様
+├─ トグル機能の詳細
+└─ Phase 1とPhase 2の範囲
 ```
 
 ---
 
-### 10.2 重要なポイント
+### 10.2 v1.0からの主要な変更
 
-1. **セクション別に特化**: 各タブで関連情報のみ表示
-2. **前半・後半は原則合算**: 95%が全日利用のため
-3. **送迎量の重要性**: 配車計画、新規受入判断
-4. **ホバーで素早く確認**: 電話対応時に即座に回答
-5. **詳細モードで調整作業**: 前半・後半のバランスを見ながら予定組み
-6. **泊まりの介助量**: 夜勤体制の判断材料
-7. **縦幅の制約**: 画面全体の1/6程度に抑える
-
----
-
-### 10.3 Phase 1で実装すること
-
-```
-✅ Phase 1
-├─ 通いセクション: 通い・迎え・送りの3行
-├─ ホバーポップアップ（通いのみ）
-├─ 詳細表示モード（前半・後半展開）
-├─ 泊まりセクション: 人数・介助量の4行
-└─ 訪問セクション: 回数の1行
-
-⏭️ Phase 2以降
-├─ 全体タブの統合ビュー
-├─ 訪問の職員別表示
-├─ 送迎の1便・2便区別
-└─ リアルタイム更新
-```
+| 項目 | v1.0 | v2.0 |
+|------|------|------|
+| **行数** | 4行（日付行含む） | 3行（日付行削除） |
+| **日付表示** | 日別サマリーが担当 | カレンダーヘッダーが担当 |
+| **縦軸整列** | 記載なし | マスト要件として明記 |
+| **CSS変数** | 使用せず | --label-column-width, --date-cell-width |
+| **責任分離** | 曖昧 | 明確（日付はカレンダーヘッダー） |
 
 ---
 
-### 10.4 次のステップ
+### 10.3 重要な設計判断
 
-日別サマリー設計が完成しました。
+1. **日付行を削除した理由**
+   - カレンダーヘッダーが日付を担当
+   - 責任の分離（日付表示の一元化）
+   - 省スペース化
 
-**次に更新すべきドキュメント**:
-1. **L2_通い_UI設計.md** - 日別サマリーへの参照追加
-2. **L3_UI_統合UI設計.md** - 画面構成に日別サマリー追加
+2. **縦軸整列をマスト要件にした理由**
+   - ユーザーの明確な要求
+   - カレンダーヘッダーが「物差し」として機能
+   - 視認性の向上
 
-**実装順序**:
-1. 通いセクションの日別サマリー（基本）
-2. ホバーポップアップ
-3. 詳細表示モード
-4. 泊まりセクションの日別サマリー
-5. 訪問セクションの日別サマリー
+3. **CSS変数を使用した理由**
+   - セル幅の統一
+   - 保守性の向上
+   - 縦軸整列の保証
 
 ---
 
@@ -1277,19 +1077,19 @@ test('トグルボタンで詳細モードに切り替わる', () => {
 
 ### 関連ドキュメント
 
-- **L2_通い_データ構造.md** - pickupType/dropoffTypeの定義
-- **L2_通い_UI設計.md** - 通いセクションのUI全体
-- **L3_UI_統合UI設計.md** - 画面全体の構成
+- **L3_UI_統合UI設計.md v3.0** - カレンダーヘッダーのサンドイッチ配置
+- **L2_通い_UI設計.md** - 通いセクションの詳細UI（縦軸整列対応）
+- **L2_泊まり_UI設計.md** - 泊まりセクションの詳細UI（縦軸整列対応）
+- **L2_訪問_UI設計.md** - 訪問セクションの詳細UI（縦軸整列対応）
 
 ---
 
 ## 📝 参考資料
 
-- L2_通い_データ構造.md（KayoiScheduleクラス、pickupType/dropoffType）
-- L2_泊まり_データ構造.md（TomariReservationクラス）
-- L2_訪問_データ構造.md（HoumonScheduleクラス）
-- L1_データ_共通データ構造.md（Userマスタ、介助量）
-- L3_UI_統合UI設計.md（タブナビゲーション、画面構成）
+- L0_業務_居室管理の重要性.md（夜勤負担度の可視化）
+- L0_業務_調整業務の制約.md（3サービスの同時管理）
+- L1_概要_プロジェクト概要.md（制約パズル、即フィードバック）
+- CHECKLIST_設計レビュー.md（設計品質の5原則）
 
 ---
 
@@ -1297,28 +1097,29 @@ test('トグルボタンで詳細モードに切り替わる', () => {
 
 | 日付 | バージョン | 変更内容 | 担当 |
 |------|----------|---------|------|
-| 2025-11-27 | 1.0 | 初版作成 | Claude |
+| 2025-11-29 | 1.0 | 初版作成（4行構成） | Claude |
+| 2025-11-29 | 2.0 | 日付行削除、カレンダーヘッダー連動、縦軸整列設計 | Claude |
 
 ---
 
-**最終更新**: 2025年11月27日  
+**最終更新**: 2025年11月29日  
 **次回更新予定**: Phase 1実装中のフィードバック反映時
 
 ---
 
 ## ⚠️ 設計チェックリスト
 
-このドキュメントの品質チェック：
+このドキュメントの品質チェック（v2.0）：
 
-- [x] すべてのセクションの表示内容が明確
-- [x] HTML/CSS/JavaScriptのコード例がある
-- [x] データ取得ロジックが具体的
-- [x] ホバーとトグルの動作が詳細に記述
-- [x] 色分けルールが定義されている
-- [x] 業務シナリオが含まれている
-- [x] Phase 1/2の区別が明確
-- [x] テスト仕様が具体的
+- [x] 日付行の削除が反映されている
+- [x] カレンダーヘッダーとの連動が設計されている
+- [x] 縦軸整列の設計が具体的
+- [x] CSS変数の使用が明記されている
+- [x] 色分け表示の仕様が詳細
+- [x] トグル機能が完全に設計されている
+- [x] JavaScript クラスが設計されている
+- [x] Phase 1とPhase 2の範囲が明確
 
 ---
 
-**このドキュメントを読了したら、INDEX_ドキュメント構成.md に戻り、次のドキュメントに進んでください。**
+**このドキュメントを読了したら、L3_UI_統合UI設計.md v3.0に戻り、全体像を確認してください。**
