@@ -319,7 +319,9 @@ export class KayoiSection {
             userId: user.userId,
             userName: user.name,
             date: dateStr,
-            section: schedule.section
+            section: schedule.section,
+            pickupType: schedule.pickupType || 'staff',
+            dropoffType: schedule.dropoffType || 'staff'
           });
         }
       }

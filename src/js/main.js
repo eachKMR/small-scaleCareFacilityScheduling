@@ -15,6 +15,7 @@ import { TomariLogic } from './tomari/TomariLogic.js';
 import { TomariUI } from './tomari/TomariUI.js';
 import { HoumonLogic } from './houmon/HoumonLogic.js';
 import { HoumonUI } from './houmon/HoumonUI.js';
+import { DailySummaryUI } from './ui/DailySummaryUI.js';
 
 class App {
   constructor() {
@@ -27,6 +28,7 @@ class App {
     };
     this.activeSection = 'kayoi';
     this.currentYearMonth = DateUtils.getCurrentYearMonth();
+    this.kayoiDailySummaryUI = null; // 通い専用の日別サマリーUI
   }
 
   /**
@@ -81,14 +83,36 @@ class App {
     // カレンダー見出しを描画
     CalendarHeaderRenderer.render(this.currentYearMonth);
 
-    // 日別サマリーを描画
+    // 日別サマリーを描画（統合UI用）
     this.updateDailySummary();
+
+    // 通い専用の日別サマリーを初期化
+    this.initializeKayoiDailySummary();
 
     // タブジャンプ機能を初期化
     TabJumpController.initialize();
 
     // 列幅計算を初期化
     ColumnWidthCalculator.initialize(this.currentYearMonth);
+  }
+
+  /**
+   * 通い専用の日別サマリーを初期化
+   */
+  initializeKayoiDailySummary() {
+    const kayoiSummaryElement = document.querySelector('.kayoi-summary');
+    if (kayoiSummaryElement && this.sections.kayoi) {
+      this.kayoiDailySummaryUI = new DailySummaryUI(
+        kayoiSummaryElement,
+        this.sections.kayoi
+      );
+      
+      // 初回レンダリング
+      const { year, month } = this.currentYearMonth;
+      this.kayoiDailySummaryUI.render(year, month);
+      
+      console.log('通い専用日別サマリー初期化完了');
+    }
   }
 
   /**
@@ -244,8 +268,14 @@ class App {
       this.sections[this.activeSection].changeMonth(this.currentYearMonth);
     }
 
-    // 日別サマリーを更新
+    // 日別サマリーを更新（統合UI用）
     this.updateDailySummary();
+
+    // 通い専用の日別サマリーを更新
+    if (this.kayoiDailySummaryUI) {
+      const { year, month } = this.currentYearMonth;
+      this.kayoiDailySummaryUI.render(year, month);
+    }
   }
 
   /**
@@ -266,8 +296,14 @@ class App {
       this.sections[this.activeSection].changeMonth(this.currentYearMonth);
     }
 
-    // 日別サマリーを更新
+    // 日別サマリーを更新（統合UI用）
     this.updateDailySummary();
+
+    // 通い専用の日別サマリーを更新
+    if (this.kayoiDailySummaryUI) {
+      const { year, month } = this.currentYearMonth;
+      this.kayoiDailySummaryUI.render(year, month);
+    }
   }
 
   /**

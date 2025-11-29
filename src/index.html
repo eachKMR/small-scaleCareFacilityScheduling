@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="css/kayoi.css">
   <link rel="stylesheet" href="css/tomari.css">
   <link rel="stylesheet" href="css/houmon.css">
+  <link rel="stylesheet" href="css/daily-summary.css">
 </head>
 <body>
   <div id="app">
@@ -69,7 +70,78 @@
 
       <!-- 通いセクション -->
       <section id="kayoi-section" class="section kayoi-section">
-        <h3 class="section-title">通い（デイサービス）</h3>
+        <h3 class="section-title">通い(デイサービス)</h3>
+        
+        <!-- 通い専用日別サマリー -->
+        <div class="daily-summary kayoi-summary">
+          <div class="summary-header">
+            <h4 class="summary-title">日別サマリー</h4>
+            <button class="toggle-button" data-target="kayoi">詳細表示</button>
+          </div>
+          
+          <!-- 通常モード: 3行（通い・迎え・送り） -->
+          <div class="summary-rows simple-mode" data-mode="simple">
+            <div class="summary-row main-row" data-row-type="kayoi">
+              <div class="row-label">通い</div>
+              <div class="count-cells" data-row-type="kayoi">
+                <!-- 日付ごとのセルがJavaScriptで生成 -->
+              </div>
+            </div>
+            <div class="summary-row sub-row" data-row-type="pickup">
+              <div class="row-label">迎え</div>
+              <div class="count-cells" data-row-type="pickup">
+                <!-- 日付ごとのセルがJavaScriptで生成 -->
+              </div>
+            </div>
+            <div class="summary-row sub-row" data-row-type="dropoff">
+              <div class="row-label">送り</div>
+              <div class="count-cells" data-row-type="dropoff">
+                <!-- 日付ごとのセルがJavaScriptで生成 -->
+              </div>
+            </div>
+          </div>
+          
+          <!-- 詳細モード: 5行（通い・前半・後半・迎え・送り） -->
+          <div class="summary-rows detail-mode" data-mode="detail" style="display: none;">
+            <div class="summary-row main-row" data-row-type="kayoi">
+              <div class="row-label">通い</div>
+              <div class="count-cells" data-row-type="kayoi">
+                <!-- 日付ごとのセルがJavaScriptで生成 -->
+              </div>
+            </div>
+            <div class="summary-row sub-row" data-row-type="zenhan">
+              <div class="row-label">前半</div>
+              <div class="count-cells" data-row-type="zenhan">
+                <!-- 日付ごとのセルがJavaScriptで生成 -->
+              </div>
+            </div>
+            <div class="summary-row sub-row" data-row-type="kohan">
+              <div class="row-label">後半</div>
+              <div class="count-cells" data-row-type="kohan">
+                <!-- 日付ごとのセルがJavaScriptで生成 -->
+              </div>
+            </div>
+            <div class="summary-row sub-row" data-row-type="pickup">
+              <div class="row-label">迎え</div>
+              <div class="count-cells" data-row-type="pickup">
+                <!-- 日付ごとのセルがJavaScriptで生成 -->
+              </div>
+            </div>
+            <div class="summary-row sub-row" data-row-type="dropoff">
+              <div class="row-label">送り</div>
+              <div class="count-cells" data-row-type="dropoff">
+                <!-- 日付ごとのセルがJavaScriptで生成 -->
+              </div>
+            </div>
+          </div>
+          
+          <!-- ホバーポップアップ -->
+          <div class="hover-popup" id="hover-popup-kayoi" style="display: none;">
+            <div class="popup-date"></div>
+            <div class="popup-details"></div>
+          </div>
+        </div>
+        
         <div class="section-content">
           <div id="kayoi-grid">
             <!-- 通いのグリッドがここに描画される -->
