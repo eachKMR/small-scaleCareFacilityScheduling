@@ -575,9 +575,22 @@ function handleDeleteClick() {
 ```css
 /* グローバルCSS変数（L3_UI_統合UI設計.mdで定義） */
 :root {
-  --label-column-width: 80px;  /* ラベル列の幅 */
-  --date-cell-width: 40px;      /* 日付セルの幅 */
+  /* ラベル列は固定 */
+  --label-column-width: 80px;
+  
+  /* 日付セルは画面幅に応じて動的計算（レスポンシブ設計） */
+  /* 横スクロール禁止のため、clamp()を使用 */
+  --date-cell-width: clamp(
+    35px,                                /* 最小幅（これ以下にならない） */
+    calc((100vw - 80px - 30px) / 31),   /* 計算値 */
+    50px                                 /* 最大幅（これ以上大きくならない） */
+  );
 }
+
+/**
+ * 詳細はL3_UI_統合UI設計.mdを参照
+ * すべての画面で横スクロールなし（マスト要件）
+ */
 
 /* 訪問セクションで使用 */
 .schedule-grid .user-header,

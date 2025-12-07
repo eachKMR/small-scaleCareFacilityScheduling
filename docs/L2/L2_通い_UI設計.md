@@ -510,9 +510,22 @@ function handleCellClick(event) {
 ```css
 /* グローバルCSS変数（L3_UI_統合UI設計.mdで定義） */
 :root {
-  --label-column-width: 80px;  /* ラベル列の幅 */
-  --date-cell-width: 40px;      /* 日付セルの幅 */
+  /* ラベル列は固定 */
+  --label-column-width: 80px;
+  
+  /* 日付セルは画面幅に応じて動的計算（レスポンシブ設計） */
+  /* 横スクロール禁止のため、clamp()を使用 */
+  --date-cell-width: clamp(
+    35px,                                /* 最小幅（これ以下にならない） */
+    calc((100vw - 80px - 30px) / 31),   /* 計算値 */
+    50px                                 /* 最大幅（これ以上大きくならない） */
+  );
 }
+
+/**
+ * 詳細はL3_UI_統合UI設計.mdを参照
+ * すべての画面で横スクロールなし（マスト要件）
+ */
 
 /* 通いセクションで使用 */
 .schedule-grid .user-header,
@@ -629,17 +642,18 @@ if (process.env.NODE_ENV === 'development') {
   z-index: 100;
 }
 
-/* 通い予定表はスクロール可能 */
+/* 通い予定表は縦スクロールのみ */
 .schedule-grid-container {
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow-x: hidden; /* 横スクロール禁止（マスト要件） */
+  overflow-y: auto;   /* 縦スクロールのみ */
 }
 ```
 
 **重要**:
 - カレンダーヘッダーと日別サマリーは固定
-- 予定表のみスクロール
+- 予定表は縦スクロールのみ（横スクロール禁止）
 - スクロール時も縦軸が維持される
+- レスポンシブ設計により、すべての画面幅で31日分が収まる
 
 ---
 

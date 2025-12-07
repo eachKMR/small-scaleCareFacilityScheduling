@@ -15,7 +15,6 @@ import { TomariLogic } from './tomari/TomariLogic.js';
 import { TomariUI } from './tomari/TomariUI.js';
 import { HoumonLogic } from './houmon/HoumonLogic.js';
 import { HoumonUI } from './houmon/HoumonUI.js';
-import { DailySummaryUI } from './ui/DailySummaryUI.js';
 
 class App {
   constructor() {
@@ -28,7 +27,6 @@ class App {
     };
     this.activeSection = 'kayoi';
     this.currentYearMonth = DateUtils.getCurrentYearMonth();
-    this.kayoiDailySummaryUI = null; // 通い専用の日別サマリーUI
   }
 
   /**
@@ -86,33 +84,11 @@ class App {
     // 日別サマリーを描画（統合UI用）
     this.updateDailySummary();
 
-    // 通い専用の日別サマリーを初期化
-    this.initializeKayoiDailySummary();
-
     // タブジャンプ機能を初期化
     TabJumpController.initialize();
 
     // 列幅計算を初期化
     ColumnWidthCalculator.initialize(this.currentYearMonth);
-  }
-
-  /**
-   * 通い専用の日別サマリーを初期化
-   */
-  initializeKayoiDailySummary() {
-    const kayoiSummaryElement = document.querySelector('.kayoi-summary');
-    if (kayoiSummaryElement && this.sections.kayoi) {
-      this.kayoiDailySummaryUI = new DailySummaryUI(
-        kayoiSummaryElement,
-        this.sections.kayoi
-      );
-      
-      // 初回レンダリング
-      const { year, month } = this.currentYearMonth;
-      this.kayoiDailySummaryUI.render(year, month);
-      
-      console.log('通い専用日別サマリー初期化完了');
-    }
   }
 
   /**
@@ -158,15 +134,15 @@ class App {
     });
 
     // カレンダーコントロール
-    document.getElementById('prev-month-btn').addEventListener('click', () => {
+    document.getElementById('prev-month').addEventListener('click', () => {
       this.changeMonth(-1);
     });
 
-    document.getElementById('next-month-btn').addEventListener('click', () => {
+    document.getElementById('next-month').addEventListener('click', () => {
       this.changeMonth(1);
     });
 
-    document.getElementById('today-btn').addEventListener('click', () => {
+    document.getElementById('today-button').addEventListener('click', () => {
       this.goToToday();
     });
 
@@ -177,19 +153,19 @@ class App {
       this.csvImportUI.showFileDialog();
     });
 
-    document.getElementById('print-btn').addEventListener('click', () => {
+    document.getElementById('print-button').addEventListener('click', () => {
       this.showToast('印刷機能は開発中です', 'info');
     });
 
-    document.getElementById('export-btn').addEventListener('click', () => {
+    document.getElementById('export-button').addEventListener('click', () => {
       this.showToast('エクスポート機能は開発中です', 'info');
     });
 
-    document.getElementById('settings-btn').addEventListener('click', () => {
+    document.getElementById('settings-button').addEventListener('click', () => {
       this.showToast('設定画面は開発中です', 'info');
     });
 
-    document.getElementById('help-btn').addEventListener('click', () => {
+    document.getElementById('help-button').addEventListener('click', () => {
       this.showToast('ヘルプは開発中です', 'info');
     });
 
@@ -298,12 +274,6 @@ class App {
 
     // 日別サマリーを更新（統合UI用）
     this.updateDailySummary();
-
-    // 通い専用の日別サマリーを更新
-    if (this.kayoiDailySummaryUI) {
-      const { year, month } = this.currentYearMonth;
-      this.kayoiDailySummaryUI.render(year, month);
-    }
   }
 
   /**

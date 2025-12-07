@@ -1,5 +1,5 @@
 /**
- * 通いセクションの日別サマリーUI制御
+ * 全体の日別サマリーUI制御
  * @version 1.0
  * @see L3_UI_日別サマリー設計.md
  */
@@ -9,7 +9,7 @@ import { DailySummaryService } from '../services/DailySummaryService.js';
 class DailySummaryUI {
   /**
    * コンストラクタ
-   * @param {HTMLElement} summaryElement - .kayoi-summary要素
+   * @param {HTMLElement} summaryElement - .daily-summary要素
    * @param {ScheduleManager} scheduleManager - 予定管理オブジェクト
    */
   constructor(summaryElement, scheduleManager) {

@@ -259,19 +259,24 @@ export class DailySummaryRenderer {
  */
 export class CalendarHeaderRenderer {
   /**
-   * カレンダー見出しを描画
+   * カレンダー見出しを描画（2行構造：日付行と曜日行）
    * @param {string} yearMonth - 対象年月 (YYYY-MM形式)
    */
   static render(yearMonth) {
-    const headerRow = document.querySelector('#calendar-header-row');
-    if (!headerRow) {
-      console.error('calendar-header-row要素が見つかりません');
+    const dateRow = document.querySelector('#calendar-date-row');
+    const weekdayRow = document.querySelector('#calendar-weekday-row');
+    
+    if (!dateRow || !weekdayRow) {
+      console.error('calendar-date-row または calendar-weekday-row 要素が見つかりません');
       return;
     }
     
     // 既存の内容をクリア（ラベルセルを除く）
-    while (headerRow.children.length > 1) {
-      headerRow.removeChild(headerRow.lastChild);
+    while (dateRow.children.length > 1) {
+      dateRow.removeChild(dateRow.lastChild);
+    }
+    while (weekdayRow.children.length > 1) {
+      weekdayRow.removeChild(weekdayRow.lastChild);
     }
     
     const [year, month] = yearMonth.split('-').map(Number);
@@ -279,28 +284,29 @@ export class CalendarHeaderRenderer {
     
     // 曜日名
     const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
-    const dayClasses = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${yearMonth}-${String(day).padStart(2, '0')}`;
       const date = new Date(year, month - 1, day);
       const dayOfWeek = date.getDay();
       
-      const th = document.createElement('th');
-      th.className = 'date-header';
-      th.dataset.date = dateStr;
+      // 日付セル
+      const dateTd = document.createElement('td');
+      dateTd.className = 'date-cell';
+      dateTd.dataset.date = dateStr;
+      dateTd.textContent = day;
+      dateRow.appendChild(dateTd);
       
-      const dateDiv = document.createElement('div');
-      dateDiv.className = 'date';
-      dateDiv.textContent = day;
-      
-      const dayDiv = document.createElement('div');
-      dayDiv.className = `day ${dayClasses[dayOfWeek]}`;
-      dayDiv.textContent = dayNames[dayOfWeek];
-      
-      th.appendChild(dateDiv);
-      th.appendChild(dayDiv);
-      headerRow.appendChild(th);
+      // 曜日セル
+      const weekdayTd = document.createElement('td');
+      weekdayTd.className = 'weekday-cell';
+      if (dayOfWeek === 0) {
+        weekdayTd.classList.add('sunday');
+      } else if (dayOfWeek === 6) {
+        weekdayTd.classList.add('saturday');
+      }
+      weekdayTd.textContent = dayNames[dayOfWeek];
+      weekdayRow.appendChild(weekdayTd);
     }
   }
 }

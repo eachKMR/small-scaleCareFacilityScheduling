@@ -133,6 +133,10 @@
   /* Date Column */
   --grid-date-column-width: 60px;
   
+  /* 縦軸整列用のCSS変数 */
+  --label-column-width: 80px;
+  --date-cell-width: 40px;
+  
   /* ===== Breakpoints (Phase 2以降) ===== */
   --breakpoint-sm: 576px;
   --breakpoint-md: 768px;

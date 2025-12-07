@@ -274,17 +274,64 @@
 }
 
 /* ========================================
-   カレンダー見出しのsticky固定
+   カレンダー見出しのsticky固定（物差し機能）
    ======================================== */
 
-.calendar-header-sticky {
+.calendar-header-ruler {
   position: sticky;
   top: 100px; /* 統合ヘッダー60px + コンパクトタブ40px */
-  z-index: 98; /* タブより下 */
-  background-color: white;
+  z-index: 90;
+  background: white;
+  border-bottom: 2px solid #333;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.calendar-ruler-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+/* ラベル列 */
+.calendar-ruler-table .label-cell {
+  width: var(--label-column-width);
+  background: #f5f5f5;
+  border-right: 2px solid #ddd;
+}
+
+/* 日付セル */
+.calendar-ruler-table .date-cell {
+  min-width: var(--date-cell-width);
+  width: var(--date-cell-width);
+  padding: 8px 4px;
+  text-align: center;
+  font-weight: bold;
+  font-size: 16px;
+  border-right: 1px solid #eee;
+}
+
+/* 曜日セル */
+.calendar-ruler-table .weekday-cell {
+  min-width: var(--date-cell-width);
+  width: var(--date-cell-width);
+  padding: 4px;
+  text-align: center;
+  font-size: 12px;
+  color: #666;
+  border-right: 1px solid #eee;
+}
+
+/* 土曜日 */
+.calendar-ruler-table .weekday-cell.saturday {
+  color: #0066cc;
+}
+
+/* 日曜日 */
+.calendar-ruler-table .weekday-cell.sunday {
+  color: #cc0000;
+}
+
+/* 旧スタイル（後方互換性のため残す） */
 .header-table {
   border-collapse: collapse;
   border-spacing: 0;

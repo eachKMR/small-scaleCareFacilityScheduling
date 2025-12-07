@@ -57,8 +57,8 @@
   left: 0;
   z-index: 30;
   background: var(--color-bg);
-  min-width: var(--grid-name-width);
-  max-width: var(--grid-name-width);
+  min-width: var(--grid-user-column-width);
+  max-width: var(--grid-user-column-width);
   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
 }
 
