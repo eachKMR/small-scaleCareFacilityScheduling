@@ -130,7 +130,24 @@
 .schedule-cell .symbol {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-bold);
-  color: var(--color-kayoi);
+  display: inline-block;
+  text-align: center;
+  width: 100%;
+}
+
+/* 終日（○） */
+.schedule-cell .symbol.zennitsu {
+  color: #333;
+}
+
+/* 前半のみ（◓） */
+.schedule-cell .symbol.zenhan {
+  color: #0066cc;
+}
+
+/* 後半のみ（◒） */
+.schedule-cell .symbol.kouhan {
+  color: #cc6600;
 }
 
 .schedule-cell .note {

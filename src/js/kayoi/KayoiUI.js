@@ -85,45 +85,35 @@ export class KayoiUI {
   }
 
   /**
-   * 利用者行を描画
+   * 利用者行を描画（1利用者1行）
    * @param {User} user
    * @param {string[]} dates - "YYYY-MM-DD" 形式の日付配列
    */
   renderUserRow(user, dates) {
-    // 前半行
-    const zenhanRow = this.createDataRow(user, dates, '前半');
-    this.container.appendChild(zenhanRow);
-
-    // 後半行
-    const kohanRow = this.createDataRow(user, dates, '後半');
-    this.container.appendChild(kohanRow);
+    const row = this.createDataRow(user, dates);
+    this.container.appendChild(row);
   }
 
   /**
-   * データ行を作成
+   * データ行を作成（1利用者1行、記号で前半・後半を表現）
    * @param {User} user
    * @param {string[]} dates - "YYYY-MM-DD" 形式の日付配列
-   * @param {string} section - "前半" | "後半"
    * @returns {HTMLElement}
    */
-  createDataRow(user, dates, section) {
+  createDataRow(user, dates) {
     const row = document.createElement('div');
     row.className = 'grid-row data-row';
     row.dataset.userId = user.userId;
-    row.dataset.section = section;
 
-    // 利用者名列（セクション表示）
+    // 利用者名列
     const nameCell = document.createElement('div');
     nameCell.className = 'grid-cell name-cell sticky-left';
-    nameCell.innerHTML = `
-      <span class="user-name">${user.displayName}</span>
-      <span class="section-label">${section}</span>
-    `;
+    nameCell.innerHTML = `<span class="user-name">${user.displayName}</span>`;
     row.appendChild(nameCell);
 
     // 日付セル
     dates.forEach(dateStr => {
-      const cell = this.createScheduleCell(user.userId, dateStr, section);
+      const cell = this.createScheduleCell(user.userId, dateStr);
       row.appendChild(cell);
     });
 
@@ -131,41 +121,81 @@ export class KayoiUI {
   }
 
   /**
-   * スケジュールセルを作成
+   * スケジュールセルを作成（記号で前半・後半を表現）
    * @param {string} userId
    * @param {string} date
-   * @param {string} section
    * @returns {HTMLElement}
    */
-  createScheduleCell(userId, date, section) {
+  createScheduleCell(userId, date) {
     const cell = document.createElement('div');
     cell.className = 'grid-cell schedule-cell';
     cell.dataset.userId = userId;
     cell.dataset.date = date;
-    cell.dataset.section = section;
 
-    // スケジュールを取得
-    const schedule = this.logic.getSchedule(userId, date, section);
+    // その日のスケジュールを取得（前半・後半・終日を統合）
+    const schedule = this.getScheduleForDate(userId, date);
     
     if (schedule) {
+      const { symbol, className } = this.getSymbolAndClass(schedule.section);
+      
       cell.classList.add('has-schedule');
       cell.innerHTML = `
-        <span class="symbol">${schedule.symbol}</span>
+        <span class="symbol ${className}">${symbol}</span>
         ${schedule.note ? `<span class="note">${schedule.note}</span>` : ''}
       `;
+      
+      // 定員状況を反映
+      this.updateCellCapacityStatus(cell, date, schedule.section);
     }
-
-    // 定員状況を反映
-    this.updateCellCapacityStatus(cell, date, section);
 
     // クリックイベント
     cell.addEventListener('click', () => {
       if (this.onCellClick) {
-        this.onCellClick({ userId, date, section, schedule });
+        this.onCellClick({ userId, date, schedule });
       }
     });
 
     return cell;
+  }
+
+  /**
+   * その日のスケジュールを取得（前半・後半・終日を統合）
+   * @param {string} userId
+   * @param {string} date
+   * @returns {Object|null}
+   */
+  getScheduleForDate(userId, date) {
+    // 終日を優先
+    const zennitsu = this.logic.getSchedule(userId, date, '終日');
+    if (zennitsu) return zennitsu;
+
+    // 前半をチェック
+    const zenhan = this.logic.getSchedule(userId, date, '前半');
+    if (zenhan) return zenhan;
+
+    // 後半をチェック
+    const kouhan = this.logic.getSchedule(userId, date, '後半');
+    if (kouhan) return kouhan;
+
+    return null;
+  }
+
+  /**
+   * section値から記号とクラス名を取得
+   * @param {string} section - "前半" | "後半" | "終日"
+   * @returns {{symbol: string, className: string}}
+   */
+  getSymbolAndClass(section) {
+    switch (section) {
+      case '終日':
+        return { symbol: '○', className: 'zennitsu' };
+      case '前半':
+        return { symbol: '◓', className: 'zenhan' };
+      case '後半':
+        return { symbol: '◒', className: 'kouhan' };
+      default:
+        return { symbol: '-', className: '' };
+    }
   }
 
   /**
@@ -208,29 +238,31 @@ export class KayoiUI {
    * 特定のセルを更新
    * @param {string} userId
    * @param {string} date
-   * @param {string} section
    */
-  updateCell(userId, date, section) {
+  updateCell(userId, date) {
     const cell = this.container.querySelector(
-      `.schedule-cell[data-user-id="${userId}"][data-date="${date}"][data-section="${section}"]`
+      `.schedule-cell[data-user-id="${userId}"][data-date="${date}"]`
     );
 
     if (!cell) return;
 
-    const schedule = this.logic.getSchedule(userId, date, section);
+    // その日のスケジュールを取得
+    const schedule = this.getScheduleForDate(userId, date);
     
     if (schedule) {
+      const { symbol, className } = this.getSymbolAndClass(schedule.section);
+      
       cell.classList.add('has-schedule');
       cell.innerHTML = `
-        <span class="symbol">${schedule.symbol}</span>
+        <span class="symbol ${className}">${symbol}</span>
         ${schedule.note ? `<span class="note">${schedule.note}</span>` : ''}
       `;
+      
+      this.updateCellCapacityStatus(cell, date, schedule.section);
     } else {
       cell.classList.remove('has-schedule');
       cell.innerHTML = '';
     }
-
-    this.updateCellCapacityStatus(cell, date, section);
   }
 
   /**

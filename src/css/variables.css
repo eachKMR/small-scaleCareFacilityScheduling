@@ -135,7 +135,11 @@
   
   /* 縦軸整列用のCSS変数 */
   --label-column-width: 80px;
-  --date-cell-width: 40px;
+  --date-cell-width: clamp(
+    35px,
+    calc((100vw - 80px - 30px) / 31),
+    50px
+  );
   
   /* ===== Breakpoints (Phase 2以降) ===== */
   --breakpoint-sm: 576px;
