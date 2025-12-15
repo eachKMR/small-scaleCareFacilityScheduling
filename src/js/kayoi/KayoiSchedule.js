@@ -11,23 +11,35 @@ import { ValidationUtils } from '../common/utils/ValidationUtils.js';
 export class KayoiSchedule {
   /**
    * @param {Object} data
+   * @param {string} data.id - 一意識別子（自動生成）
    * @param {string} data.userId - 利用者ID
    * @param {string} data.date - 日付 "YYYY-MM-DD"
    * @param {string} data.section - "前半" | "後半" | "終日"
-   * @param {string} data.symbol - "○" | "◓" | "◒"
    * @param {string} data.pickupType - "staff" | "family" (デフォルト: "staff")
    * @param {string} data.dropoffType - "staff" | "family" (デフォルト: "staff")
    * @param {string} data.note - 備考（任意）
    */
   constructor(data) {
+    this.id = data.id || this._generateId(data.date);
     this.userId = data.userId;
     this.date = data.date;
     this.section = data.section;
-    this.symbol = data.symbol;
-    // ✨ Phase 1: 送迎タイプ追加
     this.pickupType = data.pickupType || 'staff';
     this.dropoffType = data.dropoffType || 'staff';
     this.note = data.note || '';
+    this.createdAt = data.createdAt || new Date().toISOString();
+    this.updatedAt = data.updatedAt || new Date().toISOString();
+  }
+
+  /**
+   * ID生成（内部使用）
+   * @param {string} date
+   * @returns {string}
+   */
+  _generateId(date) {
+    const dateStr = date.replace(/-/g, '');
+    const sequence = Math.floor(Math.random() * 1000);
+    return `kayoi_${dateStr}_${sequence.toString().padStart(3, '0')}`;
   }
 
   /**
@@ -49,11 +61,7 @@ export class KayoiSchedule {
       errors.push('セクションが不正です');
     }
 
-    if (!ValidationUtils.isValidKayoiSymbol(this.symbol)) {
-      errors.push('記号が不正です');
-    }
-
-    // ✨ Phase 1: 送迎タイプのバリデーション
+    // 送迎タイプのバリデーション
     if (!['staff', 'family'].includes(this.pickupType)) {
       errors.push('pickupTypeは"staff"または"family"である必要があります');
     }
@@ -78,13 +86,15 @@ export class KayoiSchedule {
    */
   toJSON() {
     return {
+      id: this.id,
       userId: this.userId,
       date: this.date,
       section: this.section,
-      symbol: this.symbol,
-      pickupType: this.pickupType,    // ✨ Phase 1: 追加
-      dropoffType: this.dropoffType,  // ✨ Phase 1: 追加
-      note: this.note
+      pickupType: this.pickupType,
+      dropoffType: this.dropoffType,
+      note: this.note,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt
     };
   }
 
@@ -106,11 +116,24 @@ export class KayoiSchedule {
   }
 
   /**
+   * 表示用の記号を取得
+   * @returns {string}
+   */
+  getSymbol() {
+    switch (this.section) {
+      case '終日': return '○';
+      case '前半': return '◓';
+      case '後半': return '◒';
+      default: return '';
+    }
+  }
+
+  /**
    * 表示用の文字列を取得
    * @returns {string}
    */
   getDisplayText() {
-    const parts = [this.symbol];
+    const parts = [this.getSymbol()];
     if (this.note) {
       parts.push(this.note);
     }

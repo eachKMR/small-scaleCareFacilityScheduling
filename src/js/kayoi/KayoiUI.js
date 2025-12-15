@@ -42,6 +42,9 @@ export class KayoiUI {
     if (users.length === 0) {
       this.renderEmptyState();
     }
+
+    // 定員カウントを更新
+    this.updateCapacityDisplay();
   }
 
   /**
@@ -273,8 +276,120 @@ export class KayoiUI {
     const cells = this.container.querySelectorAll(`.schedule-cell[data-date="${date}"]`);
     
     cells.forEach(cell => {
-      const section = cell.dataset.section;
-      this.updateCellCapacityStatus(cell, date, section);
+      const userId = cell.dataset.userId;
+      const schedule = this.getScheduleForDate(userId, date);
+      if (schedule) {
+        this.updateCellCapacityStatus(cell, date, schedule.section);
+      }
     });
+  }
+
+  /**
+   * 定員カウントを更新
+   */
+  updateCapacityDisplay() {
+    const dates = DateUtils.generateDatesInMonth(this.currentYearMonth);
+    
+    // 月全体の最大値を計算
+    let maxZenhan = 0;
+    let maxKohan = 0;
+    
+    dates.forEach(date => {
+      const { zenhan, kohan } = this.logic.countSchedulesByDate(date);
+      maxZenhan = Math.max(maxZenhan, zenhan);
+      maxKohan = Math.max(maxKohan, kohan);
+    });
+    
+    // 表示を更新
+    const zenhanCount = document.getElementById('zenhan-count');
+    const kohanCount = document.getElementById('kohan-count');
+    
+    if (zenhanCount) zenhanCount.textContent = maxZenhan;
+    if (kohanCount) kohanCount.textContent = maxKohan;
+    
+    // カラーグラデーションを適用
+    this.applyColorGradient('zenhan', maxZenhan, 15);
+    this.applyColorGradient('kohan', maxKohan, 15);
+  }
+
+  /**
+   * カラーグラデーションを適用
+   * @param {string} section - 'zenhan' | 'kohan'
+   * @param {number} actual - 実際の人数
+   * @param {number} capacity - 定員
+   */
+  applyColorGradient(section, actual, capacity) {
+    const element = document.getElementById(`${section}-capacity`);
+    if (!element) return;
+    
+    // 登録率を計算（仮に29人とする）
+    const registeredUsers = this.masterData.getAllUsers().length;
+    const baseline = capacity * (registeredUsers / 29);
+    
+    const { backgroundColor, border, className } = this.getColorAndBorder(
+      actual,
+      baseline,
+      capacity
+    );
+    
+    // スタイルを適用
+    element.style.backgroundColor = backgroundColor;
+    element.style.border = border || 'none';
+    
+    // クラスを設定
+    element.className = `capacity-item ${className}`;
+  }
+
+  /**
+   * カラーとボーダーを取得
+   * @param {number} actual - 実際の人数
+   * @param {number} baseline - 基準線
+   * @param {number} capacity - 定員
+   * @returns {{backgroundColor: string, border: string, className: string}}
+   */
+  getColorAndBorder(actual, baseline, capacity) {
+    // 定員超過
+    if (actual > capacity) {
+      return {
+        backgroundColor: 'hsl(0, 100%, 90%)',
+        border: '4px double hsl(0, 100%, 50%)',
+        className: 'over-capacity'
+      };
+    }
+    
+    const ratio = actual / baseline;
+    
+    // 基準線超過（定員以内）
+    if (ratio > 1.0) {
+      return {
+        backgroundColor: 'hsl(45, 100%, 85%)',
+        border: '2px solid hsl(45, 100%, 50%)',
+        className: 'over-baseline'
+      };
+    }
+    
+    // グラデーション範囲（80-100%）
+    if (ratio >= 0.80) {
+      const progress = (ratio - 0.80) / 0.20; // 0.0 → 1.0
+      
+      // 明度を段階的に変化（85% → 50%）
+      const lightness = 85 - (35 * progress);
+      
+      // 彩度も段階的に変化（30% → 60%）
+      const saturation = 30 + (30 * progress);
+      
+      return {
+        backgroundColor: `hsl(200, ${saturation}%, ${lightness}%)`,
+        border: 'none',
+        className: 'in-gradient'
+      };
+    }
+    
+    // 80%未満（余裕あり）
+    return {
+      backgroundColor: 'hsl(200, 30%, 85%)',
+      border: 'none',
+      className: 'plenty'
+    };
   }
 }

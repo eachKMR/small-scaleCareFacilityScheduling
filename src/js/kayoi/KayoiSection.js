@@ -55,18 +55,86 @@ export class KayoiSection {
   }
 
   /**
-   * セルクリック処理
-   * @param {Object} data - { userId, date, section, schedule }
+   * セルクリック処理（トグル方式）
+   * @param {Object} data - { userId, date, schedule }
    */
   handleCellClick(data) {
-    const { userId, date, section, schedule } = data;
+    const { userId, date, schedule } = data;
 
-    if (schedule) {
-      // 既存スケジュールの編集・削除
-      this.showEditDialog(userId, date, section, schedule);
-    } else {
-      // 新規スケジュールの作成
-      this.showAddDialog(userId, date, section);
+    // 現在の状態を判定
+    const currentState = this.getCurrentState(userId, date);
+    
+    // 次の状態に遷移
+    const nextState = this.getNextState(currentState);
+    
+    // 状態を適用
+    this.applyState(userId, date, nextState);
+    
+    // UIを更新
+    this.ui.updateCell(userId, date);
+    this.ui.updateCapacityDisplay();
+    
+    // 保存
+    this.save();
+  }
+
+  /**
+   * 現在の状態を取得
+   * @param {string} userId
+   * @param {string} date
+   * @returns {string} '空欄' | '前半' | '後半' | '終日'
+   */
+  getCurrentState(userId, date) {
+    const zenhan = this.logic.getSchedule(userId, date, '前半');
+    const kohan = this.logic.getSchedule(userId, date, '後半');
+    const zennitsu = this.logic.getSchedule(userId, date, '終日');
+
+    if (zennitsu) return '終日';
+    if (zenhan) return '前半';
+    if (kohan) return '後半';
+    return '空欄';
+  }
+
+  /**
+   * 次の状態を取得
+   * @param {string} currentState
+   * @returns {string}
+   */
+  getNextState(currentState) {
+    const sequence = ['空欄', '前半', '後半', '終日'];
+    const currentIndex = sequence.indexOf(currentState);
+    const nextIndex = (currentIndex + 1) % sequence.length;
+    return sequence[nextIndex];
+  }
+
+  /**
+   * 状態を適用
+   * @param {string} userId
+   * @param {string} date
+   * @param {string} nextState
+   */
+  applyState(userId, date, nextState) {
+    // 既存のスケジュールを削除
+    this.logic.deleteSchedule(userId, date, '前半');
+    this.logic.deleteSchedule(userId, date, '後半');
+    this.logic.deleteSchedule(userId, date, '終日');
+
+    // 空欄以外の場合、新しいスケジュールを追加
+    if (nextState !== '空欄') {
+      const schedule = new KayoiSchedule({
+        userId,
+        date,
+        section: nextState
+      });
+
+      const result = this.logic.setSchedule(schedule);
+      
+      // 定員超過の場合、エラーメッセージを表示
+      if (!result.ok) {
+        alert(result.message);
+        // 元の状態に戻す（何もしない）
+        return;
+      }
     }
   }
 

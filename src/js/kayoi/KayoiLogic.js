@@ -161,6 +161,29 @@ export class KayoiLogic {
   }
 
   /**
+   * 日別の前半・後半カウントを取得
+   * @param {string} date
+   * @returns {{zenhan: number, kohan: number}}
+   */
+  countSchedulesByDate(date) {
+    let zenhan = 0;
+    let kohan = 0;
+
+    for (const schedule of this.schedules.values()) {
+      if (schedule.date === date) {
+        if (schedule.section === '前半' || schedule.section === '終日') {
+          zenhan++;
+        }
+        if (schedule.section === '後半' || schedule.section === '終日') {
+          kohan++;
+        }
+      }
+    }
+
+    return { zenhan, kohan };
+  }
+
+  /**
    * 月のスケジュールを取得
    * @param {string} yearMonth - "YYYY-MM"
    * @returns {KayoiSchedule[]}
