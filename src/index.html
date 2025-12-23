@@ -76,19 +76,7 @@
 
       <!-- 通いセクション -->
       <section id="kayoi-section" class="section kayoi-section">
-        <!-- 定員表示 -->
-        <div class="capacity-display">
-          <div class="capacity-item" id="zenhan-capacity">
-            <span class="label">前半:</span>
-            <span id="zenhan-count" class="count">0</span>
-            <span class="max">/15人</span>
-          </div>
-          <div class="capacity-item" id="kohan-capacity">
-            <span class="label">後半:</span>
-            <span id="kohan-count" class="count">0</span>
-            <span class="max">/15人</span>
-          </div>
-        </div>
+        <!-- ❌ v3.1: 定員表示は削除済み（日別サマリーで管理） -->
         
         <div class="section-content">
           <div id="kayoi-grid">
@@ -143,6 +131,39 @@
   <div id="toast-container"></div>
   <div id="loading" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10000;">
     読み込み中...
+  </div>
+
+  <!-- カレンダーダイアログ -->
+  <div id="tomari-calendar" class="calendar-dialog" style="display: none;">
+    <div class="calendar-header">
+      <button class="month-nav prev">◀</button>
+      <span class="month-title">2025年 11月</span>
+      <button class="month-nav next">▶</button>
+    </div>
+    
+    <div class="calendar-body">
+      <table class="calendar-table">
+        <thead>
+          <tr>
+            <th>日</th>
+            <th>月</th>
+            <th>火</th>
+            <th>水</th>
+            <th>木</th>
+            <th>金</th>
+            <th>土</th>
+          </tr>
+        </thead>
+        <tbody id="calendar-tbody">
+          <!-- 動的に生成 -->
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="calendar-footer">
+      <button id="calendar-clear-btn">クリア</button>
+      <button id="calendar-confirm-btn">戻る</button>
+    </div>
   </div>
 
   <!-- JavaScript (ES Modules) -->

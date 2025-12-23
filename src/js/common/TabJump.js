@@ -53,6 +53,8 @@ export class ColumnWidthCalculator {
    */
   static calculate(yearMonth) {
     const screenWidth = window.innerWidth;
+    console.log('🔍 screenWidth:', screenWidth);
+    
     const labelColumnWidth = 120;
     const scrollbarWidth = 20;
     const margin = 40;
@@ -60,18 +62,23 @@ export class ColumnWidthCalculator {
     // 日付列の数（月によって28-31日）
     const [year, month] = yearMonth.split('-').map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
+    console.log('🔍 daysInMonth:', daysInMonth);
     
     // 利用可能な幅
     const availableWidth = screenWidth - labelColumnWidth - scrollbarWidth - margin;
+    console.log('🔍 availableWidth:', availableWidth);
     
     // 1列あたりの幅
     let columnWidth = availableWidth / daysInMonth;
+    console.log('🔍 計算前 columnWidth:', columnWidth);
     
     // 最小・最大の範囲内に収める
     columnWidth = Math.max(40, Math.min(60, columnWidth));
+    console.log('🔍 最終 columnWidth:', columnWidth);
     
     // CSS変数に設定
     document.documentElement.style.setProperty('--column-width', `${columnWidth}px`);
+    console.log('🔍 CSS変数設定完了');
   }
   
   /**
@@ -79,8 +86,14 @@ export class ColumnWidthCalculator {
    * @param {string} yearMonth - 対象年月 (YYYY-MM形式)
    */
   static initialize(yearMonth) {
-    // 初回計算
-    this.calculate(yearMonth);
+    // ページの完全な読み込みを待つ
+    if (document.readyState === 'complete') {
+      this.calculate(yearMonth);
+    } else {
+      window.addEventListener('load', () => {
+        this.calculate(yearMonth);
+      });
+    }
     
     // リサイズ時の再計算
     let resizeTimer;

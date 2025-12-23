@@ -2,7 +2,8 @@
  * KayoiSection.js
  * 通いセクションコントローラー
  * 
- * UI・ロジック・データの統合管理
+ * UI・ロジチE��・チE�Eタの統合管琁E
+ * @version 2.0 - トグル処琁E��簡素化、新しいKayoiUIと連携
  */
 
 import { KayoiSchedule } from './KayoiSchedule.js';
@@ -26,322 +27,31 @@ export class KayoiSection {
   }
 
   /**
-   * データを読み込み
+   * チE�Eタを読み込み
    */
   load() {
-    const data = StorageUtils.load('kayoi', null);
-    if (data) {
-      this.logic.fromJSON(data);
-    }
+    this.ui.loadFromStorage();
   }
 
   /**
-   * データを保存
+   * チE�Eタを保孁E
    */
   save() {
-    const data = this.logic.toJSON();
-    StorageUtils.save('kayoi', data);
+    this.ui.saveToStorage();
     StorageUtils.updateLastSaved();
   }
 
   /**
-   * イベントハンドラーをセットアップ
+   * イベントハンドラーをセチE��アチE�E
    */
   setupEventHandlers() {
-    // セルクリック
-    this.ui.onCellClick = (data) => {
-      this.handleCellClick(data);
-    };
-  }
-
-  /**
-   * セルクリック処理（トグル方式）
-   * @param {Object} data - { userId, date, schedule }
-   */
-  handleCellClick(data) {
-    const { userId, date, schedule } = data;
-
-    // 現在の状態を判定
-    const currentState = this.getCurrentState(userId, date);
-    
-    // 次の状態に遷移
-    const nextState = this.getNextState(currentState);
-    
-    // 状態を適用
-    this.applyState(userId, date, nextState);
-    
-    // UIを更新
-    this.ui.updateCell(userId, date);
-    this.ui.updateCapacityDisplay();
-    
-    // 保存
-    this.save();
-  }
-
-  /**
-   * 現在の状態を取得
-   * @param {string} userId
-   * @param {string} date
-   * @returns {string} '空欄' | '前半' | '後半' | '終日'
-   */
-  getCurrentState(userId, date) {
-    const zenhan = this.logic.getSchedule(userId, date, '前半');
-    const kohan = this.logic.getSchedule(userId, date, '後半');
-    const zennitsu = this.logic.getSchedule(userId, date, '終日');
-
-    if (zennitsu) return '終日';
-    if (zenhan) return '前半';
-    if (kohan) return '後半';
-    return '空欄';
-  }
-
-  /**
-   * 次の状態を取得
-   * @param {string} currentState
-   * @returns {string}
-   */
-  getNextState(currentState) {
-    const sequence = ['空欄', '前半', '後半', '終日'];
-    const currentIndex = sequence.indexOf(currentState);
-    const nextIndex = (currentIndex + 1) % sequence.length;
-    return sequence[nextIndex];
-  }
-
-  /**
-   * 状態を適用
-   * @param {string} userId
-   * @param {string} date
-   * @param {string} nextState
-   */
-  applyState(userId, date, nextState) {
-    // 既存のスケジュールを削除
-    this.logic.deleteSchedule(userId, date, '前半');
-    this.logic.deleteSchedule(userId, date, '後半');
-    this.logic.deleteSchedule(userId, date, '終日');
-
-    // 空欄以外の場合、新しいスケジュールを追加
-    if (nextState !== '空欄') {
-      const schedule = new KayoiSchedule({
-        userId,
-        date,
-        section: nextState
-      });
-
-      const result = this.logic.setSchedule(schedule);
-      
-      // 定員超過の場合、エラーメッセージを表示
-      if (!result.ok) {
-        alert(result.message);
-        // 元の状態に戻す（何もしない）
-        return;
-      }
-    }
-  }
-
-  /**
-   * 追加ダイアログを表示
-   * @param {string} userId
-   * @param {string} date
-   * @param {string} section
-   */
-  showAddDialog(userId, date, section) {
-    const user = this.masterData.getUser(userId);
-    const dateDisplay = DateUtils.formatDateDisplay(date);
-
-    const html = `
-      <h2>通い予定を追加</h2>
-      <div class="dialog-content">
-        <div class="form-group">
-          <label>利用者</label>
-          <div>${user.displayName}</div>
-        </div>
-        <div class="form-group">
-          <label>日付</label>
-          <div>${dateDisplay} ${section}</div>
-        </div>
-        <div class="form-group">
-          <label>記号</label>
-          <select id="symbol-select">
-            <option value="○">○ 予定</option>
-            <option value="◓">◓ 送迎あり</option>
-            <option value="◒">◒ 送迎なし</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>備考</label>
-          <input type="text" id="note-input" maxlength="100" placeholder="任意">
-        </div>
-      </div>
-      <div class="dialog-actions">
-        <button class="btn btn-secondary" id="cancel-btn">キャンセル</button>
-        <button class="btn btn-primary" id="save-btn">保存</button>
-      </div>
-    `;
-
-    this.showModal(html, () => {
-      const symbol = document.getElementById('symbol-select').value;
-      const note = document.getElementById('note-input').value;
-
-      const schedule = new KayoiSchedule({
-        userId,
-        date,
-        section,
-        symbol,
-        note
-      });
-
-      const result = this.logic.setSchedule(schedule);
-      
-      if (result.ok) {
-        this.save();
-        this.ui.updateCell(userId, date, section);
-        this.ui.updateDateCapacity(date);
-        this.showToast('保存しました', 'success');
-        this.closeModal();
-      } else {
-        this.showToast(result.message, 'error');
+    // Ctrl+Z�E��Eに戻す！E
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'z') {
+        e.preventDefault();
+        this.ui.undo();
       }
     });
-  }
-
-  /**
-   * 編集ダイアログを表示
-   * @param {string} userId
-   * @param {string} date
-   * @param {string} section
-   * @param {KayoiSchedule} schedule
-   */
-  showEditDialog(userId, date, section, schedule) {
-    const user = this.masterData.getUser(userId);
-    const dateDisplay = DateUtils.formatDateDisplay(date);
-
-    const html = `
-      <h2>通い予定を編集</h2>
-      <div class="dialog-content">
-        <div class="form-group">
-          <label>利用者</label>
-          <div>${user.displayName}</div>
-        </div>
-        <div class="form-group">
-          <label>日付</label>
-          <div>${dateDisplay} ${section}</div>
-        </div>
-        <div class="form-group">
-          <label>記号</label>
-          <select id="symbol-select">
-            <option value="○" ${schedule.symbol === '○' ? 'selected' : ''}>○ 予定</option>
-            <option value="◓" ${schedule.symbol === '◓' ? 'selected' : ''}>◓ 送迎あり</option>
-            <option value="◒" ${schedule.symbol === '◒' ? 'selected' : ''}>◒ 送迎なし</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>備考</label>
-          <input type="text" id="note-input" maxlength="100" value="${schedule.note}">
-        </div>
-      </div>
-      <div class="dialog-actions">
-        <button class="btn btn-danger" id="delete-btn">削除</button>
-        <button class="btn btn-secondary" id="cancel-btn">キャンセル</button>
-        <button class="btn btn-primary" id="save-btn">保存</button>
-      </div>
-    `;
-
-    this.showModal(html, () => {
-      const symbol = document.getElementById('symbol-select').value;
-      const note = document.getElementById('note-input').value;
-
-      schedule.symbol = symbol;
-      schedule.note = note;
-
-      const result = this.logic.setSchedule(schedule);
-      
-      if (result.ok) {
-        this.save();
-        this.ui.updateCell(userId, date, section);
-        this.ui.updateDateCapacity(date);
-        this.showToast('保存しました', 'success');
-        this.closeModal();
-      } else {
-        this.showToast(result.message, 'error');
-      }
-    }, () => {
-      // 削除ボタン
-      if (confirm('この予定を削除しますか？')) {
-        this.logic.deleteSchedule(userId, date, section);
-        this.save();
-        this.ui.updateCell(userId, date, section);
-        this.ui.updateDateCapacity(date);
-        this.showToast('削除しました', 'info');
-        this.closeModal();
-      }
-    });
-  }
-
-  /**
-   * モーダルを表示
-   * @param {string} html
-   * @param {Function} onSave
-   * @param {Function} onDelete
-   */
-  showModal(html, onSave, onDelete = null) {
-    const modal = document.getElementById('modal');
-    const overlay = document.getElementById('modal-overlay');
-    
-    modal.innerHTML = html;
-    modal.classList.add('active');
-    overlay.classList.add('active');
-
-    // イベントリスナー
-    const saveBtn = document.getElementById('save-btn');
-    const cancelBtn = document.getElementById('cancel-btn');
-    const deleteBtn = document.getElementById('delete-btn');
-
-    if (saveBtn) {
-      saveBtn.addEventListener('click', onSave);
-    }
-
-    if (cancelBtn) {
-      cancelBtn.addEventListener('click', () => this.closeModal());
-    }
-
-    if (deleteBtn && onDelete) {
-      deleteBtn.addEventListener('click', onDelete);
-    }
-  }
-
-  /**
-   * モーダルを閉じる
-   */
-  closeModal() {
-    const modal = document.getElementById('modal');
-    const overlay = document.getElementById('modal-overlay');
-    
-    modal.classList.remove('active');
-    overlay.classList.remove('active');
-  }
-
-  /**
-   * トースト通知を表示
-   * @param {string} message
-   * @param {string} type - 'success' | 'error' | 'info' | 'warning'
-   */
-  showToast(message, type = 'info') {
-    const container = document.getElementById('toast-container');
-    
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-    
-    container.appendChild(toast);
-
-    setTimeout(() => {
-      toast.classList.add('show');
-    }, 10);
-
-    setTimeout(() => {
-      toast.classList.remove('show');
-      setTimeout(() => toast.remove(), 300);
-    }, 3000);
   }
 
   /**
@@ -368,33 +78,21 @@ export class KayoiSection {
   }
 
   /**
+   * v4.0: 泊まりデータを同期
+   * @param {Array} tomariReservations - TomariReservationの配列
+   */
+  syncTomariData(tomariReservations) {
+    this.logic.syncTomariData(tomariReservations);
+    // 表示を再レンダリング
+    this.ui.render(this.currentYearMonth);
+  }
+
+  /**
    * 全スケジュールを取得（日別サマリー用）
-   * @returns {Array} スケジュールデータの配列
+   * @returns {KayoiSchedule[]} スケジュールデータの配列
    */
   getAllSchedules() {
-    const schedules = [];
-    const users = this.masterData.getAllUsers();
-    const [year, month] = this.currentYearMonth.split('-').map(Number);
-    const daysInMonth = new Date(year, month, 0).getDate();
-
-    users.forEach(user => {
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${this.currentYearMonth}-${String(day).padStart(2, '0')}`;
-        const schedule = this.logic.getSchedule(user.userId, dateStr);
-        
-        if (schedule && schedule.section !== 'none') {
-          schedules.push({
-            userId: user.userId,
-            userName: user.name,
-            date: dateStr,
-            section: schedule.section,
-            pickupType: schedule.pickupType || 'staff',
-            dropoffType: schedule.dropoffType || 'staff'
-          });
-        }
-      }
-    });
-
-    return schedules;
+    return this.logic.getMonthSchedules(this.currentYearMonth);
   }
 }
+

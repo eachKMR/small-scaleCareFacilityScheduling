@@ -1,225 +1,183 @@
 /**
  * kayoi.css
  * 通いセクション専用スタイル
+ * 
+ * ⚠️ 重要: カレンダーヘッダー（日付・曜日行）はL3で定義されており、ここでは作成しない
+ * table要素を使用し、CSS変数で縦軸整列を確保
  */
 
-/* ========== グリッドレイアウト ========== */
+/* ========== グリッドレイアウト（table要素） ========== */
+
+#kayoi-section {
+  margin-bottom: var(--spacing-lg);
+}
 
 #kayoi-grid {
-  overflow-x: auto;
-  overflow-y: auto;
-  max-height: calc(100vh - 250px);
-}
-
-#kayoi-grid table {
-  table-layout: fixed;
+  table-layout: fixed; /* ⚠️ 必須: 縦軸整列のため */
   width: 100%;
   border-collapse: collapse;
+  font-size: var(--font-size-sm);
 }
 
+/* 列幅の定義（colgroup用） */
+#kayoi-grid .user-col {
+  width: var(--label-column-width);
+}
+
+#kayoi-grid .date-col {
+  width: var(--date-cell-width);
+}
+
+/* ラベル列（利用者名） */
 #kayoi-grid .user-header,
 #kayoi-grid .user-cell {
   width: var(--label-column-width);
   min-width: var(--label-column-width);
+  max-width: var(--label-column-width);
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-bg);
 }
 
-#kayoi-grid .date-header,
-#kayoi-grid .schedule-cell {
-  width: var(--date-cell-width);
-  min-width: var(--date-cell-width);
-}
-
-.grid-row {
-  display: flex;
-  min-width: max-content;
-}
-
-.grid-cell {
-  min-width: var(--grid-cell-width);
-  height: var(--grid-cell-height);
-  border: 1px solid var(--border-color);
-  border-right: none;
-  border-bottom: none;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.grid-row:last-child .grid-cell {
-  border-bottom: 1px solid var(--border-color);
-}
-
-.grid-cell:last-child {
-  border-right: 1px solid var(--border-color);
-}
-
-/* ========== ヘッダー ========== */
-
-.grid-header {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: var(--color-bg-secondary);
-}
-
-.header-cell {
-  background: var(--color-bg-secondary);
+#kayoi-grid .user-header {
+  background: var(--color-bg-alt);
   font-weight: var(--font-weight-bold);
-  font-size: var(--font-size-sm);
-}
-
-.sticky-left {
+  text-align: center;
   position: sticky;
   left: 0;
-  z-index: 30;
-  background: var(--color-bg);
-  min-width: var(--grid-user-column-width);
-  max-width: var(--grid-user-column-width);
-  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+  z-index: 10;
 }
 
-.grid-header .sticky-left {
-  z-index: 40;
+#kayoi-grid .user-cell {
+  text-align: left;
+  font-weight: var(--font-weight-medium);
+  position: sticky;
+  left: 0;
+  z-index: 5;
 }
 
-.date-header {
-  flex-direction: column;
-  padding: var(--spacing-xs);
-}
-
-.date-day {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-bold);
-}
-
-.date-weekday {
+/* 日付ヘッダー */
+#kayoi-grid .date-header {
+  width: var(--date-cell-width);
+  min-width: var(--date-cell-width);
+  max-width: var(--date-cell-width);
+  background: var(--color-bg-alt);
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-xs) var(--spacing-xxs);
+  text-align: center;
+  vertical-align: middle;
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+}
+
+#kayoi-grid .date-header .date-day {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  display: block;
+  line-height: 1.2;
+}
+
+#kayoi-grid .date-header .date-weekday {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  display: block;
   margin-top: 2px;
 }
 
-.date-header.weekend .date-weekday {
-  color: var(--color-saturday);
-}
-
-.date-header.holiday .date-weekday {
-  color: var(--color-sunday);
-}
-
-/* ========== 利用者名セル ========== */
-
-.name-cell {
-  padding: var(--spacing-xs) var(--spacing-sm);
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-}
-
-.user-name {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text);
-}
-
-.section-label {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  background: var(--color-kayoi-light);
-  padding: 2px 6px;
-  border-radius: var(--border-radius-sm);
-}
-
-/* ========== スケジュールセル ========== */
-
-.schedule-cell {
-  cursor: pointer;
-  transition: background-color var(--transition-base);
-  flex-direction: column;
-  padding: var(--spacing-xs);
-  gap: 2px;
-}
-
-.schedule-cell:hover {
-  background: var(--color-hover);
-}
-
-.schedule-cell .symbol {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-bold);
-  display: inline-block;
-  text-align: center;
-  width: 100%;
-}
-
-/* 終日（○） */
-.schedule-cell .symbol.zennitsu {
-  color: #333;
-}
-
-/* 前半のみ（◓） */
-.schedule-cell .symbol.zenhan {
+/* 土曜日・日曜日・祝日の色 */
+#kayoi-grid .date-header.weekend .date-weekday {
   color: #0066cc;
 }
 
-/* 後半のみ（◒） */
-.schedule-cell .symbol.kouhan {
-  color: #cc6600;
+#kayoi-grid .date-header.holiday .date-day,
+#kayoi-grid .date-header.holiday .date-weekday {
+  color: #cc0000;
 }
 
-.schedule-cell .note {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+/* 日付セル */
+#kayoi-grid .schedule-cell {
+  width: var(--date-cell-width);
+  min-width: var(--date-cell-width);
+  max-width: var(--date-cell-width);
+  border: 1px solid var(--color-border);
+  text-align: center;
+  vertical-align: middle;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  
+  /* v4.0: デフォルトの下罫線 */
+  border-bottom: 1px solid var(--color-border);
 }
 
-/* ========== 定員状況 ========== */
-
-.schedule-cell.capacity-near {
-  background: var(--color-capacity-near);
+#kayoi-grid .schedule-cell:hover {
+  background: var(--color-bg-hover);
 }
 
-.schedule-cell.capacity-near:hover {
-  background: var(--color-capacity-near);
-  filter: brightness(0.95);
+/* v4.0: 泊まり期間の罫線 - 入所・連泊（青） */
+#kayoi-grid .schedule-cell[data-border-state="stay"] {
+  border-bottom: 4px solid #2196f3;
 }
 
-.schedule-cell.capacity-full {
-  background: var(--color-capacity-full);
+/* v4.0: 泊まり期間の罫線 - 退所（薄青） */
+#kayoi-grid .schedule-cell[data-border-state="checkout"] {
+  border-bottom: 4px solid rgba(33, 150, 243, 0.3);
 }
 
-.schedule-cell.capacity-full:hover {
-  background: var(--color-capacity-full);
-  filter: brightness(0.95);
+/* 記号 */
+#kayoi-grid .schedule-cell .symbol {
+  font-size: 18px;
+  font-weight: var(--font-weight-bold);
+  display: inline-block;
+  line-height: 1;
 }
 
-/* ========== データ行 ========== */
-
-.data-row {
-  background: var(--color-bg);
+/* 予定あり */
+#kayoi-grid .schedule-cell.has-schedule {
+  background: var(--color-kayoi);
 }
 
-.data-row:nth-child(even) {
-  background: var(--color-bg-secondary);
+/* v4.0: セル更新アニメーション */
+#kayoi-grid .schedule-cell.updated {
+  animation: fadeIn 0.2s ease;
 }
 
-.data-row .sticky-left {
-  background: inherit;
+@keyframes fadeIn {
+  from {
+    background-color: rgba(33, 150, 243, 0.3);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+/* フラッシュアニメーション */
+#kayoi-grid .schedule-cell.flash-error {
+  animation: flashError 0.6s;
+}
+
+#kayoi-grid .schedule-cell.flash-success {
+  animation: flashSuccess 0.6s;
+}
+
+@keyframes flashError {
+  0%, 100% { background: var(--color-bg); }
+  50% { background: var(--color-danger); }
+}
+
+@keyframes flashSuccess {
+  0%, 100% { background: var(--color-bg); }
+  50% { background: var(--color-success); }
 }
 
 /* ========== 空の状態 ========== */
 
-.empty-state {
+#kayoi-grid .empty-state {
   padding: var(--spacing-xxl);
   text-align: center;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
 }
 
-.empty-state p {
+#kayoi-grid .empty-state p {
   margin: var(--spacing-sm) 0;
 }
 
@@ -230,7 +188,7 @@
   gap: var(--spacing-lg);
   padding: var(--spacing-md);
   margin-bottom: var(--spacing-md);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .capacity-item {
@@ -239,7 +197,7 @@
   gap: var(--spacing-xs);
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--border-radius-md);
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .capacity-item .label {
@@ -254,85 +212,241 @@
 
 .capacity-item .max {
   font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
 }
 
-/* カラーグラデーション（80-100%） */
-.capacity-item.plenty {
-  background-color: hsl(200, 30%, 85%);
+/* ========== トーストメッセージ ========== */
+
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 24px;
+  border-radius: var(--border-radius-md);
+  z-index: 9999;
+  font-size: var(--font-size-md);
+  box-shadow: var(--shadow-lg);
+  animation: fadeIn 0.3s, fadeOut 0.3s 2.7s;
 }
 
-.capacity-item.in-gradient {
-  /* JavaScriptで動的に設定 */
+.toast-error {
+  background-color: var(--color-danger);
+  color: #fff;
 }
 
-.capacity-item.over-baseline {
-  background-color: hsl(45, 100%, 85%);
-  border: 2px solid hsl(45, 100%, 50%);
+.toast-success {
+  background-color: var(--color-success);
+  color: #fff;
 }
 
-.capacity-item.over-capacity {
-  background-color: hsl(0, 100%, 90%);
-  border: 4px double hsl(0, 100%, 50%);
+.toast-warning {
+  background-color: var(--color-warning);
+  color: #333;
 }
 
-/* ========== ダイアログ内容 ========== */
-
-.dialog-content .form-group {
-  margin-bottom: var(--spacing-md);
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.dialog-content label {
-  display: block;
-  font-weight: var(--font-weight-medium);
-  margin-bottom: var(--spacing-xs);
-  color: var(--color-text);
-}
-
-.dialog-content select,
-.dialog-content input[type="text"] {
-  width: 100%;
-  padding: var(--spacing-sm);
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-sm);
-  font-family: var(--font-family-base);
-  font-size: var(--font-size-base);
-}
-
-.dialog-content select:focus,
-.dialog-content input[type="text"]:focus {
-  outline: none;
-  border-color: var(--color-kayoi);
-  box-shadow: 0 0 0 3px var(--color-kayoi-light);
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 /* ========== レスポンシブ ========== */
 
 @media (max-width: 768px) {
-  .grid-cell {
-    min-width: 28px;
-    height: 36px;
+  #kayoi-grid {
+    font-size: 11px;
   }
 
-  .sticky-left {
-    min-width: 80px;
-    max-width: 80px;
+  #kayoi-grid .schedule-cell .symbol {
+    font-size: 16px;
   }
 
-  .user-name {
-    font-size: var(--font-size-xs);
+  .capacity-display {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+}
+
+/* ========== 印刷対応 ========== */
+
+@media print {
+  #kayoi-section {
+    page-break-inside: avoid;
   }
 
-  .section-label {
-    font-size: 10px;
-    padding: 1px 4px;
+  #kayoi-grid .schedule-cell {
+    cursor: default;
   }
 
-  .schedule-cell .symbol {
-    font-size: var(--font-size-base);
+  #kayoi-grid .schedule-cell:hover {
+    background: inherit;
   }
 
-  .schedule-cell .note {
-    display: none;
+  .capacity-display {
+    border-bottom: 2px solid #000;
   }
+}
+
+/* ========== v4.0: カレンダーダイアログ ========== */
+
+.calendar-dialog {
+  position: fixed;
+  width: 260px;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  display: none;
+  animation: slideIn 0.15s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ヘッダー */
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+  border-radius: 8px 8px 0 0;
+}
+
+.month-nav {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+}
+
+.month-nav:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+.month-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* ボディ */
+.calendar-body {
+  padding: 12px;
+}
+
+.calendar-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.calendar-table th {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px;
+  text-align: center;
+  color: #666;
+}
+
+/* カレンダーセル */
+.calendar-cell {
+  width: 32px;
+  height: 32px;
+  text-align: center;
+  vertical-align: middle;
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: 4px;
+  transition: background-color 0.15s;
+}
+
+.calendar-cell:hover {
+  background-color: #e3f2fd;
+}
+
+/* セルの状態 */
+.calendar-cell.origin {
+  background-color: #fff176;
+  font-weight: 600;
+}
+
+.calendar-cell.checkin {
+  border: 2px solid #2196f3;
+  background-color: #e3f2fd;
+}
+
+.calendar-cell.checkout {
+  border: 2px solid rgba(33, 150, 243, 0.5);
+  background-color: rgba(227, 242, 253, 0.5);
+}
+
+.calendar-cell.in-period {
+  background-color: #bbdefb;
+}
+
+.calendar-cell.deleting {
+  background-color: #e0e0e0;
+  color: #9e9e9e;
+}
+
+/* フッター */
+.calendar-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  border-top: 1px solid #ddd;
+  border-radius: 0 0 8px 8px;
+}
+
+.calendar-footer button {
+  padding: 8px 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.15s;
+}
+
+#calendar-clear-btn {
+  background-color: white;
+  color: #d32f2f;
+}
+
+#calendar-clear-btn:hover {
+  background-color: #ffebee;
+}
+
+#calendar-confirm-btn {
+  background-color: #2196f3;
+  color: white;
+  border-color: #2196f3;
+}
+
+#calendar-confirm-btn:hover {
+  background-color: #1976d2;
 }

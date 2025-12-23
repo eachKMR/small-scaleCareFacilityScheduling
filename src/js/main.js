@@ -64,10 +64,15 @@ class App {
       // 統合UI機能の初期化
       this.initializeIntegratedUI();
 
-      // 初期描画
-      this.activateSection('kayoi');
+      // v4.0: 初期化時に泊まりデータを通いセクションに同期
+      this.syncTomariToKayoi();
 
+      // 初期描画：デフォルトは日別サマリー（全体）を表示
+      // セクションは非表示だが、データは初期化済み
       console.log('Application initialized successfully');
+      
+      // 初期状態でkayoiセクションをアクティブに（タブは「全体」だが、データは準備）
+      this.sections.kayoi.activate();
     } catch (error) {
       console.error('Application initialization failed:', error);
       this.showError('アプリケーションの初期化に失敗しました');
@@ -115,18 +120,42 @@ class App {
    * UIセットアップ
    */
   setupUI() {
+    console.log('setupUI() called');
+    
     // タブ切り替え（新しいクラス名に対応）
-    document.querySelectorAll('.tab-button').forEach(btn => {
+    const tabButtons = document.querySelectorAll('.tab-button');
+    console.log('Found tab buttons:', tabButtons.length);
+    
+    tabButtons.forEach(btn => {
+      console.log('Adding listener to tab:', btn.textContent, btn.dataset.target);
       btn.addEventListener('click', (e) => {
+        console.log('Tab clicked:', e.target.dataset.target);
         const target = e.target.dataset.target;
-        // targetがsummaryの場合は日別サマリーにスクロール
+        
+        // タブのアクティブ状態を更新
+        document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        
+        // targetがsummaryの場合は全体表示（日別サマリーのみ）
         if (target === 'summary') {
+          // 全セクションを非表示
+          ['kayoi', 'tomari', 'houmon'].forEach(name => {
+            const section = document.getElementById(`${name}-section`);
+            if (section) section.style.display = 'none';
+          });
+          
+          // 日別サマリーとカレンダーヘッダーは表示
           const summaryElement = document.getElementById('summary');
           if (summaryElement) {
-            summaryElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            summaryElement.style.display = 'block';
+          }
+          const calendarHeader = document.querySelector('.calendar-header-ruler');
+          if (calendarHeader) {
+            calendarHeader.style.display = 'block';
           }
           return;
         }
+        
         // それ以外は対応するセクションIDから名前を取得
         const section = target.replace('-section', '');
         this.activateSection(section);
@@ -134,45 +163,76 @@ class App {
     });
 
     // カレンダーコントロール
-    document.getElementById('prev-month').addEventListener('click', () => {
-      this.changeMonth(-1);
-    });
+    const prevBtn = document.getElementById('prev-month');
+    const nextBtn = document.getElementById('next-month');
+    const todayBtn = document.getElementById('today-button');
+    
+    console.log('Calendar controls:', { prevBtn, nextBtn, todayBtn });
+    
+    if (prevBtn) {
+      prevBtn.addEventListener('click', () => {
+        console.log('Prev month clicked');
+        this.changeMonth(-1);
+      });
+    }
 
-    document.getElementById('next-month').addEventListener('click', () => {
-      this.changeMonth(1);
-    });
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        console.log('Next month clicked');
+        this.changeMonth(1);
+      });
+    }
 
-    document.getElementById('today-button').addEventListener('click', () => {
-      this.goToToday();
-    });
+    if (todayBtn) {
+      todayBtn.addEventListener('click', () => {
+        console.log('Today button clicked');
+        this.goToToday();
+      });
+    }
 
     // その他のボタン（Phase 1では未実装）
-    document.getElementById('csv-import-btn').addEventListener('click', () => {
-      console.log('CSV取り込みボタンがクリックされました');
-      console.log('csvImportUI:', this.csvImportUI);
-      this.csvImportUI.showFileDialog();
-    });
+    const csvBtn = document.getElementById('csv-import-btn');
+    if (csvBtn) {
+      csvBtn.addEventListener('click', () => {
+        this.csvImportUI.showFileDialog();
+      });
+    }
 
-    document.getElementById('print-button').addEventListener('click', () => {
-      this.showToast('印刷機能は開発中です', 'info');
-    });
+    const printBtn = document.getElementById('print-button');
+    if (printBtn) {
+      printBtn.addEventListener('click', () => {
+        this.showToast('印刷機能は開発中です', 'info');
+      });
+    }
 
-    document.getElementById('export-button').addEventListener('click', () => {
-      this.showToast('エクスポート機能は開発中です', 'info');
-    });
+    const exportBtn = document.getElementById('export-button');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => {
+        this.showToast('エクスポート機能は開発中です', 'info');
+      });
+    }
 
-    document.getElementById('settings-button').addEventListener('click', () => {
-      this.showToast('設定画面は開発中です', 'info');
-    });
+    const settingsBtn = document.getElementById('settings-button');
+    if (settingsBtn) {
+      settingsBtn.addEventListener('click', () => {
+        this.showToast('設定画面は開発中です', 'info');
+      });
+    }
 
-    document.getElementById('help-button').addEventListener('click', () => {
-      this.showToast('ヘルプは開発中です', 'info');
-    });
+    const helpBtn = document.getElementById('help-button');
+    if (helpBtn) {
+      helpBtn.addEventListener('click', () => {
+        this.showToast('ヘルプは開発中です', 'info');
+      });
+    }
 
     // モーダルオーバーレイクリック
-    document.getElementById('modal-overlay').addEventListener('click', () => {
-      this.closeModal();
-    });
+    const modalOverlay = document.getElementById('modal-overlay');
+    if (modalOverlay) {
+      modalOverlay.addEventListener('click', () => {
+        this.closeModal();
+      });
+    }
 
     // キーボードショートカット
     document.addEventListener('keydown', (e) => {
@@ -198,18 +258,39 @@ class App {
     document.querySelectorAll('.tab-button').forEach(btn => {
       btn.classList.remove('active');
       const target = btn.dataset.target;
-      if (target === `${sectionName}-section` || (sectionName === 'kayoi' && target === 'kayoi-section')) {
+      if (target === `${sectionName}-section`) {
         btn.classList.add('active');
       }
     });
 
-    // セクションコンテナの切り替え（全てのsectionを非表示にしてから対象を表示）
-    document.querySelectorAll('.section').forEach(section => {
-      section.style.display = 'none';
+    // 日別サマリーは常に表示
+    const summarySection = document.getElementById('summary');
+    if (summarySection) {
+      summarySection.style.display = 'block';
+    }
+    
+    // カレンダーヘッダーも常に表示
+    const calendarHeader = document.querySelector('.calendar-header-ruler');
+    if (calendarHeader) {
+      calendarHeader.style.display = 'block';
+    }
+
+    // セクションコンテナの切り替え（kayoi/tomari/houmonのみ）
+    ['kayoi', 'tomari', 'houmon'].forEach(name => {
+      const section = document.getElementById(`${name}-section`);
+      if (section) {
+        section.style.display = (name === sectionName) ? 'block' : 'none';
+      }
     });
+    
     const targetSection = document.getElementById(`${sectionName}-section`);
     if (targetSection) {
       targetSection.style.display = 'block';
+    }
+
+    // v4.0: 通いセクションをアクティブ化する前に泊まりデータを同期
+    if (sectionName === 'kayoi') {
+      this.syncTomariToKayoi();
     }
 
     // セクションをアクティブ化
@@ -274,6 +355,17 @@ class App {
 
     // 日別サマリーを更新（統合UI用）
     this.updateDailySummary();
+  }
+
+  /**
+   * v4.0: 泊まりデータを通いセクションに同期
+   * 泊まりデータが変更されたときに呼び出す
+   */
+  syncTomariToKayoi() {
+    if (this.sections.kayoi && this.sections.tomari && this.sections.tomari.logic) {
+      const tomariReservations = this.sections.tomari.logic.reservations || [];
+      this.sections.kayoi.syncTomariData(tomariReservations);
+    }
   }
 
   /**
@@ -350,6 +442,19 @@ class App {
   }
 }
 
-// アプリケーション起動
-const app = new App();
-app.init();
+// アプリケーション起動（DOMContentLoaded後に実行）
+console.log('main.js loaded, readyState:', document.readyState);
+
+if (document.readyState === 'loading') {
+  console.log('Waiting for DOMContentLoaded...');
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOMContentLoaded fired');
+    const app = new App();
+    app.init();
+  });
+} else {
+  // すでにロード済みの場合（ES6モジュールは常にこちら）
+  console.log('DOM already loaded, initializing immediately');
+  const app = new App();
+  app.init();
+}

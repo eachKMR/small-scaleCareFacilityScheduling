@@ -2,8 +2,8 @@
 
 **作成日**: 2025年11月23日  
 **カテゴリ**: 第2層 - セクション別  
-**バージョン**: 3.0  
-**更新日**: 2025年11月29日
+**バージョン**: 4.0  
+**更新日**: 2025年12月19日
 
 ---
 
@@ -11,17 +11,24 @@
 
 このドキュメントは、**通いセクションのUI設計**を定義します。
 
-### v3.0での主要な変更
+### v4.0での主要な変更
 
-1. **縦軸整列の設計を追加**
-   - CSS変数による統一
-   - table-layout: fixedの使用
-   - カレンダーヘッダーとの同期
+1. **定員表示の削除**
+   - セクション4「定員表示と視覚化」を完全削除
+   - 定員管理は日別サマリーで行う
 
-2. **ドキュメントのスリム化**
-   - 共通仕様（印刷、レスポンシブ等）を削除
-   - セクション固有の内容に特化
-   - 933行 → 約400行
+2. **操作方法の大幅変更**
+   - 短押し：通い記号のトグル（○ ⇔ ◓ ⇔ ◒ ⇔ 空欄）
+   - 長押し：カレンダー表示（泊まり期間の設定・編集）
+
+3. **カレンダーUIの追加**
+   - インライン配置（セルの近く）
+   - 新規追加モード/編集モード
+   - ボタン状態管理
+
+4. **罫線による泊まり表現**
+   - 青罫線：入所・連泊
+   - 薄青罫線：退所
 
 ### 対象読者
 
@@ -32,13 +39,14 @@
 ### 読了後に理解できること
 
 - 月別予定表のグリッド構造
-- セルのクリック処理と状態遷移
-- 定員表示と視覚化
-- **縦軸整列の設計方法**（v3.0）
+- 短押し/長押しの操作方法
+- カレンダーUIの設計
+- 罫線による泊まり表現
+- **縦軸整列の設計方法**
 
 ### 設計の前提
 
-- **L2_通い_データ構造.md** のKayoiScheduleクラスに基づく
+- **L2_通い_データ構造.md v4.0** のUserScheduleDataに基づく
 - **L3_UI_統合UI設計.md v3.0** のカレンダーヘッダー設計
 - **L1_技術_実装制約.md** のUI/UX規約に準拠
 
@@ -52,14 +60,13 @@
 ┌─────────────────────────────────────────┐
 │ [通いセクション]                         │
 ├─────────────────────────────────────────┤
-│ 定員表示                                 │
-│ 前半: 12/15人  後半: 14/15人            │
-├─────────────────────────────────────────┤
 │ 月別予定表（グリッド）                   │
 │                                          │
 │         25  26  27  28  29  30   1      │
 │         月  火  水  木  金  土  日      │
-│ 安藤    ○  ◓  ◒   -   ○   -   -      │
+│ 安藤    ○  ○  ○  ○   -   -   -      │
+│         ━━ ━━ ━━ ━━                    │
+│         青 青 青 薄青                    │
 │ 田中    ◓   -   ○  ◓   -   ○   -      │
 │ ...                                      │
 └─────────────────────────────────────────┘
@@ -67,6 +74,7 @@
 
 **注意**:
 - カレンダーヘッダー（月切り替え等）は**L3_UI_統合UI設計.md**で定義
+- 定員表示は削除（日別サマリーで管理）
 - ここでは通いセクション固有のUIのみ記載
 
 ---
@@ -75,20 +83,6 @@
 
 ```html
 <div id="kayoi-section" class="section">
-  <!-- 定員表示 -->
-  <div class="capacity-display">
-    <div class="capacity-item">
-      <span class="label">前半:</span>
-      <span id="zenhan-count" class="count">12</span>
-      <span class="max">/15人</span>
-    </div>
-    <div class="capacity-item">
-      <span class="label">後半:</span>
-      <span id="kohan-count" class="count">14</span>
-      <span class="max">/15人</span>
-    </div>
-  </div>
-  
   <!-- 月別予定表 -->
   <div class="schedule-grid-container">
     <table id="kayoi-grid" class="schedule-grid">
@@ -107,7 +101,8 @@
           <td class="user-cell">安藤</td>
           <td class="schedule-cell" 
               data-user-id="user001" 
-              data-date="2025-11-25">
+              data-date="2025-11-25"
+              data-border-state="stay">
             <span class="symbol">○</span>
           </td>
           <!-- ...他の日付 -->
@@ -117,177 +112,108 @@
     </table>
   </div>
 </div>
+
+<!-- カレンダーダイアログ（動的に表示） -->
+<div id="tomari-calendar" class="calendar-dialog" style="display: none;">
+  <!-- カレンダー内容は後述 -->
+</div>
 ```
 
 ---
 
-## 2. グリッド表示
+## 2. セル表示
 
-### 2.1 セルの構造
+### 2.1 記号（通い情報）
 
-#### 利用者セル（縦軸）
-
-```html
-<td class="user-cell" data-user-id="user001">
-  <span class="user-name">安藤</span>
-</td>
-```
-
-**スタイル**:
-```css
-.user-cell {
-  width: var(--label-column-width); /* 縦軸整列のため */
-  background-color: #f5f5f5;
-  font-weight: bold;
-  text-align: left;
-  padding: 8px;
-  border: 1px solid #ddd;
-  cursor: default;
-}
-```
+| 記号 | 意味 | 使用頻度 |
+|------|------|---------|
+| **空欄** | 利用なし | 高 |
+| **○** | 通い終日 | 高 |
+| **◓** | 通い前半 | 低 |
+| **◒** | 通い後半 | 低 |
 
 ---
 
-#### 日付ヘッダー（横軸）
+### 2.2 罫線（泊まり情報）
 
-```html
-<th class="date-header" data-date="2025-11-25">
-  <div class="date">25</div>
-  <div class="day">月</div>
-</th>
-```
+| 罫線 | 色 | 意味 |
+|------|----|----|
+| **通常** | 灰色・細い | 泊まりなし |
+| **青・太い** | `#2196f3`・4px | 入所・連泊 |
+| **薄青・太い** | `rgba(33, 150, 243, 0.3)`・4px | 退所 |
 
-**スタイル**:
+**CSS**:
 ```css
-.date-header {
-  width: var(--date-cell-width); /* 縦軸整列のため */
-  min-width: var(--date-cell-width);
-  background-color: #f5f5f5;
-  text-align: center;
-  padding: 8px;
-  border: 1px solid #ddd;
-}
-
-.date-header .date {
-  font-size: 16px;
-  font-weight: bold;
-}
-
-.date-header .day {
-  font-size: 12px;
-  color: #666;
-}
-
-/* 土曜日 */
-.date-header.saturday .day {
-  color: #0066cc;
-}
-
-/* 日曜日 */
-.date-header.sunday .day {
-  color: #cc0000;
-}
-```
-
----
-
-#### スケジュールセル
-
-```html
-<td class="schedule-cell" 
-    data-user-id="user001" 
-    data-date="2025-11-25">
-  <span class="symbol">○</span>
-</td>
-```
-
-**スタイル**:
-```css
+/* 通常の罫線 */
 .schedule-cell {
-  width: var(--date-cell-width); /* 縦軸整列のため */
-  min-width: var(--date-cell-width);
-  text-align: center;
-  padding: 8px;
-  border: 1px solid #ddd;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  height: 40px;
+  border-bottom: 1px solid #ddd;
 }
 
-.schedule-cell:hover {
-  background-color: rgba(0, 123, 255, 0.1);
+/* 入所・連泊（青） */
+.schedule-cell[data-border-state="stay"] {
+  border-bottom: 4px solid #2196f3;
 }
 
-.schedule-cell .symbol {
-  font-size: 18px;
-  display: inline-block;
+/* 退所（薄青） */
+.schedule-cell[data-border-state="checkout"] {
+  border-bottom: 4px solid rgba(33, 150, 243, 0.3);
 }
 ```
 
 ---
 
-### 2.2 記号の表示
+### 2.3 視覚例
 
-| 記号 | 意味 | HTML |
-|------|------|------|
-| **○** | 終日 | `<span class="symbol">○</span>` |
-| **◓** | 前半のみ | `<span class="symbol">◓</span>` |
-| **◒** | 後半のみ | `<span class="symbol">◒</span>` |
-| **-** | 利用なし | `<span class="symbol">-</span>` |
+```
+         25  26  27  28
+安藤    ○  ○  ○  ○
+        ━━ ━━ ━━ ━━
+        青 青 青 薄青
 
-**スタイル**:
-```css
-.symbol {
-  font-size: 18px;
-  font-weight: normal;
-}
-
-/* 空欄の場合のハイフン */
-.symbol:empty::after {
-  content: '-';
-  color: #ccc;
-}
+説明:
+- 25-28日に泊まり
+- 25日: 入所（青罫線）+ 通い終日（○）
+- 26-27日: 連泊中（青罫線）+ 通い終日（○）
+- 28日: 退所（薄青罫線）+ 通い終日（○）
 ```
 
 ---
 
 ## 3. インタラクション
 
-### 3.1 セルのクリック処理
+### 3.1 短押し：通い記号の切り替え
 
 #### 状態遷移図
 
 ```
 最もよく使われるのは終日(○)なので、最初に配置
 
-┌─────┐   クリック   ┌─────┐
+┌─────┐   短押し   ┌─────┐
 │ 空欄 │ ────────→ │ 終日 │
 └─────┘             └─────┘
    ↑                    │
-   │                    │ クリック
+   │                    │ 短押し
    │                    ↓
    │                ┌─────┐
    │                │ 前半 │
    │                └─────┘
    │                    │
-   │                    │ クリック
+   │                    │ 短押し
    │                    ↓
    │                ┌─────┐
    │                │ 後半 │
    │                └─────┘
    │                    │
-   │     クリック       │
+   │     短押し         │
    └────────────────────┘
 
 記号の対応:
 空欄 → ○ → ◓ → ◒ → 空欄
-
-※ 実務では終日(○)が最も頻繁に使われるため、最初に配置
 ```
 
 ---
 
-#### クリックイベントの処理
+#### 短押しイベントの処理
 
 ```javascript
 function handleCellClick(event) {
@@ -312,29 +238,24 @@ function handleCellClick(event) {
     nextSymbol = '-'; // 後半 → 空欄
   }
   
-  // 定員チェック
-  const section = getSectionFromSymbol(nextSymbol);
-  if (section && !checkCapacity(date, section)) {
-    showToast('定員に達しています', 'error');
-    return;
-  }
-  
   // データ更新
-  updateSchedule(userId, date, nextSymbol);
+  updateKayoi(userId, date, getKayoiType(nextSymbol));
   
   // 表示更新
   cell.querySelector('.symbol').textContent = nextSymbol;
-  
-  // 定員表示を更新
-  updateCapacityDisplay();
   
   // アニメーション
   cell.classList.add('updated');
   setTimeout(() => cell.classList.remove('updated'), 200);
 }
-```
 
-**注意**: 定員超過の場合は更新せず、トースト通知を表示
+function getKayoiType(symbol) {
+  if (symbol === '○') return '終日';
+  if (symbol === '◓') return '前半';
+  if (symbol === '◒') return '後半';
+  return null;  // 空欄
+}
+```
 
 ---
 
@@ -347,143 +268,511 @@ function handleCellClick(event) {
 
 .schedule-cell:hover {
   cursor: pointer;
-}
-
-.schedule-cell.readonly {
-  cursor: default;
+  background-color: rgba(33, 150, 243, 0.05);
 }
 ```
 
 ---
 
-### 3.2 ドラッグ操作（Phase 2）
+### 3.2 長押し：カレンダー表示
 
-**横方向のドラッグで連続入力**
+#### 長押し検出
 
+```javascript
+let longPressTimer;
+const LONG_PRESS_DURATION = 800; // 0.8秒
+
+cell.addEventListener('mousedown', (e) => {
+  // タイマー開始
+  longPressTimer = setTimeout(() => {
+    handleLongPress(e);
+  }, LONG_PRESS_DURATION);
+});
+
+cell.addEventListener('mouseup', () => {
+  // タイマーをクリア（短押し）
+  clearTimeout(longPressTimer);
+});
+
+cell.addEventListener('mouseleave', () => {
+  // マウスが離れたらキャンセル
+  clearTimeout(longPressTimer);
+});
 ```
-例: 安藤さんの行で、25日から27日までドラッグ
-→ 25日、26日、27日すべてに同じ記号（○）を入力
-```
-
-**重要**: ドラッグは便利だが、必ず代替手段を提供すること
-
-**代替手段**:
-1. セルを個別にクリック
-2. Ctrl+C / Ctrl+V（コピー&ペースト）
-3. 一括入力機能
-
-**Phase 1では未実装** - Phase 2以降で検討
 
 ---
 
-### 3.3 キーボード操作（Phase 2）
+#### 長押し時の処理
 
-| キー | 動作 |
-|------|------|
-| **矢印キー** | セル間の移動 |
-| **Enter** | 選択中のセルをクリック（状態遷移） |
-| **Delete** | 選択中のセルを空欄にする |
-| **Ctrl+C** | 選択中のセルをコピー |
-| **Ctrl+V** | コピーしたセルをペースト |
-| **Ctrl+Z** | 直前の操作を元に戻す |
-
-**Phase 1では未実装** - Phase 2以降で検討
+```javascript
+function handleLongPress(event) {
+  const cell = event.target.closest('.schedule-cell');
+  if (!cell) return;
+  
+  const userId = cell.dataset.userId;
+  const date = cell.dataset.date;
+  const userData = getUserData(userId);
+  
+  // カレンダーを表示
+  if (userData.tomariPeriod) {
+    // 編集モード
+    showCalendarEditMode(cell, userId, date, userData.tomariPeriod);
+  } else {
+    // 新規追加モード
+    showCalendarAddMode(cell, userId, date);
+  }
+}
+```
 
 ---
 
-## 4. 定員表示と視覚化
+## 4. カレンダーUI設計
 
-### 4.1 定員表示エリア
+### 4.1 配置
+
+**インライン配置（セルの近く）**
+
+```javascript
+function positionCalendar(calendar, cell) {
+  const cellRect = cell.getBoundingClientRect();
+  
+  // 基本位置：セルの右下
+  let left = cellRect.right + 10;
+  let top = cellRect.top;
+  
+  // 画面端チェック（はみ出す場合は調整）
+  const calendarWidth = 260;
+  const calendarHeight = 300;
+  
+  if (left + calendarWidth > window.innerWidth) {
+    left = cellRect.left - calendarWidth - 10; // 左側に表示
+  }
+  
+  if (top + calendarHeight > window.innerHeight) {
+    top = window.innerHeight - calendarHeight - 10; // 上に調整
+  }
+  
+  calendar.style.left = left + 'px';
+  calendar.style.top = top + 'px';
+  calendar.style.display = 'block';
+}
+```
+
+---
+
+### 4.2 カレンダーHTML構造
 
 ```html
-<div class="capacity-display">
-  <div class="capacity-item zenhan">
-    <span class="label">前半:</span>
-    <span id="zenhan-count" class="count">12</span>
-    <span class="max">/15人</span>
+<div id="tomari-calendar" class="calendar-dialog">
+  <div class="calendar-header">
+    <button class="month-nav prev">◀</button>
+    <span class="month-title">2025年 11月</span>
+    <button class="month-nav next">▶</button>
   </div>
-  <div class="capacity-item kohan">
-    <span class="label">後半:</span>
-    <span id="kohan-count" class="count">14</span>
-    <span class="max">/15人</span>
+  
+  <div class="calendar-body">
+    <table class="calendar-table">
+      <thead>
+        <tr>
+          <th>日</th>
+          <th>月</th>
+          <th>火</th>
+          <th>水</th>
+          <th>木</th>
+          <th>金</th>
+          <th>土</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- カレンダーの日付セル -->
+        <tr>
+          <td class="calendar-cell" data-date="2025-11-01">1</td>
+          <!-- ... -->
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  
+  <div class="calendar-footer">
+    <button id="calendar-clear-btn">クリア</button>
+    <button id="calendar-confirm-btn">戻る</button>
   </div>
 </div>
 ```
 
 ---
 
-### 4.2 定員状態の色分け
-
-#### ルール
-
-| 状態 | 定員 | 背景色 | 説明 |
-|------|------|--------|------|
-| **余裕あり** | 0-12人 | 通常（白） | 定員の80%未満 |
-| **ギリギリ** | 13-14人 | 黄色 | 定員の80-93% |
-| **満員** | 15人 | 赤色 | 定員100% |
-
-#### スタイル
+### 4.3 カレンダーのCSS
 
 ```css
-.capacity-item {
-  padding: 8px;
+.calendar-dialog {
+  position: fixed;
+  width: 260px;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  display: none;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+}
+
+.month-nav {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+}
+
+.month-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.calendar-body {
+  padding: 12px;
+}
+
+.calendar-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.calendar-table th {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px;
+  text-align: center;
+  color: #666;
+}
+
+.calendar-cell {
+  width: 32px;
+  height: 32px;
+  text-align: center;
+  vertical-align: middle;
+  cursor: pointer;
+  font-size: 13px;
   border-radius: 4px;
-  transition: background-color 0.2s ease;
+  transition: background-color 0.15s;
 }
 
-/* 余裕あり（0-12人） */
-.capacity-item.normal {
-  background-color: transparent;
+.calendar-cell:hover {
+  background-color: #e3f2fd;
 }
 
-/* ギリギリ（13-14人） */
-.capacity-item.warning {
-  background-color: rgba(255, 255, 0, 0.2);
+/* 起点（選択開始日） */
+.calendar-cell.origin {
+  background-color: #fff176;
+  font-weight: 600;
 }
 
-/* 満員（15人） */
-.capacity-item.full {
-  background-color: rgba(255, 0, 0, 0.2);
+/* 入所日（青枠） */
+.calendar-cell.checkin {
+  border: 2px solid #2196f3;
+  background-color: #e3f2fd;
+}
+
+/* 退所日（薄青枠） */
+.calendar-cell.checkout {
+  border: 2px solid rgba(33, 150, 243, 0.5);
+  background-color: rgba(227, 242, 253, 0.5);
+}
+
+/* 期間内（青塗り） */
+.calendar-cell.in-period {
+  background-color: #bbdefb;
+}
+
+.calendar-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  border-top: 1px solid #ddd;
+}
+
+.calendar-footer button {
+  padding: 8px 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.15s;
+}
+
+#calendar-clear-btn {
+  background-color: white;
+  color: #d32f2f;
+}
+
+#calendar-clear-btn:hover {
+  background-color: #ffebee;
+}
+
+#calendar-confirm-btn {
+  background-color: #2196f3;
+  color: white;
+  border-color: #2196f3;
+}
+
+#calendar-confirm-btn:hover {
+  background-color: #1976d2;
 }
 ```
 
 ---
 
-### 4.3 セルの色分け（定員超過時）
+## 5. カレンダーの動作
 
-**ルール**: セルをクリックした際、定員超過なら赤く点滅
+### 5.1 新規追加モード
 
-```css
-.schedule-cell.over-capacity {
-  background-color: rgba(255, 0, 0, 0.1);
-  animation: blink 0.5s ease 2;
-}
+#### 初期状態
 
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
+```
+長押ししたセルの日付が「起点」として黄色表示
+
+┌──────────────────┐
+│  2025年 11月  ◀▶ │
+├──────────────────┤
+│日 月 火 水 木 金 土│
+│         1  2  3  4│
+│ 5  6  7  8  9 10 11│
+│12 13 14 ●15 16 17 18│ ← ●起点（黄色）
+│19 20 21 22 23 24 25│
+│26 27 28 29 30      │
+├──────────────────┤
+│[クリア]    [戻る] │
+└──────────────────┘
 ```
 
-**JavaScript**:
+---
+
+#### 起点より前の日をクリック
+
+```
+起点が退所日（薄青枠）に変わる
+クリック日が入所日（青枠）になる
+期間が青く塗られる
+
+12をクリック:
+┌──────────────────┐
+│  2025年 11月  ◀▶ │
+├──────────────────┤
+│日 月 火 水 木 金 土│
+│         1  2  3  4│
+│ 5  6  7  8  9 10 11│
+│■12 13 14 □15 16 17 18│ ← ■入所 □退所
+│19 20 21 22 23 24 25│
+│                     │
+│ 12〜15が青く塗られる│
+├──────────────────┤
+│[クリア]    [確定] │ ← ボタン変化
+└──────────────────┘
+```
+
+---
+
+#### 起点より後の日をクリック
+
+```
+起点が入所日（青枠）になる
+クリック日が退所日（薄青枠）になる
+期間が青く塗られる
+
+18をクリック:
+┌──────────────────┐
+│  2025年 11月  ◀▶ │
+├──────────────────┤
+│日 月 火 水 木 金 土│
+│         1  2  3  4│
+│ 5  6  7  8  9 10 11│
+│12 13 14 ■15 16 17 □18│ ← ■入所 □退所
+│19 20 21 22 23 24 25│
+│                     │
+│ 15〜18が青く塗られる│
+├──────────────────┤
+│[クリア]    [確定] │
+└──────────────────┘
+```
+
+---
+
+### 5.2 編集モード
+
+#### 初期状態
+
+```
+既存の泊まり期間が表示される
+入所日: 青枠
+退所日: 薄青枠
+期間: 青塗り
+
+┌──────────────────┐
+│  2025年 11月  ◀▶ │
+├──────────────────┤
+│日 月 火 水 木 金 土│
+│         1  2  3  4│
+│ 5  6  7  8  9 10 11│
+│■12 13 14 15 16 17 □18│ ← ■入所 □退所
+│19 20 21 22 23 24 25│
+│                     │
+│ 12〜18が青く塗られる│
+├──────────────────┤
+│[クリア]    [戻る] │
+└──────────────────┘
+```
+
+---
+
+#### 日付をクリックして変更
+
 ```javascript
-function handleCellClick(event) {
-  // ... 定員チェック
-  if (!checkCapacity(date, section)) {
-    cell.classList.add('over-capacity');
-    setTimeout(() => cell.classList.remove('over-capacity'), 1000);
-    showToast('定員に達しています', 'error');
-    return;
+function handleCalendarCellClick(event, mode, state) {
+  const cell = event.target;
+  const clickedDate = cell.dataset.date;
+  
+  if (mode === 'add') {
+    // 新規追加モード
+    if (clickedDate < state.origin) {
+      // 起点より前 → 起点が退所日
+      state.checkInDate = clickedDate;
+      state.checkOutDate = state.origin;
+    } else if (clickedDate > state.origin) {
+      // 起点より後 → 起点が入所日
+      state.checkInDate = state.origin;
+      state.checkOutDate = clickedDate;
+    }
+    
+    // ボタンを「確定」に変更
+    updateButtons(state);
+    
+  } else if (mode === 'edit') {
+    // 編集モード
+    // どちらかの枠に近い方を変更
+    const distToCheckIn = Math.abs(
+      dateDiff(clickedDate, state.checkInDate)
+    );
+    const distToCheckOut = Math.abs(
+      dateDiff(clickedDate, state.checkOutDate)
+    );
+    
+    if (distToCheckIn < distToCheckOut) {
+      state.checkInDate = clickedDate;
+    } else {
+      state.checkOutDate = clickedDate;
+    }
+    
+    // ボタンを更新
+    updateButtons(state);
   }
-  // ...
+  
+  // カレンダー再描画
+  renderCalendar(state);
 }
 ```
 
 ---
 
-## 5. 縦軸整列の設計（v3.0新規追加）
+### 5.3 ボタン状態管理
 
-### 5.1 縦軸整列の要件（マスト）
+#### ボタンラベルの判定
+
+```javascript
+function updateButtons(state) {
+  const clearBtn = document.getElementById('calendar-clear-btn');
+  const confirmBtn = document.getElementById('calendar-confirm-btn');
+  
+  // 左ボタン（クリア/元に戻す）
+  if (state.isCleared) {
+    clearBtn.textContent = '元に戻す';
+  } else {
+    clearBtn.textContent = 'クリア';
+  }
+  
+  // 右ボタン（確定/戻る）
+  const hasChanges = 
+    state.isCleared ||
+    state.checkInDate !== state.originalCheckInDate ||
+    state.checkOutDate !== state.originalCheckOutDate;
+  
+  if (hasChanges) {
+    confirmBtn.textContent = '確定';
+  } else {
+    confirmBtn.textContent = '戻る';
+  }
+}
+```
+
+---
+
+#### クリアボタンの処理
+
+```javascript
+clearBtn.addEventListener('click', () => {
+  if (state.isCleared) {
+    // 元に戻す
+    state.checkInDate = state.originalCheckInDate;
+    state.checkOutDate = state.originalCheckOutDate;
+    state.isCleared = false;
+  } else {
+    // クリア
+    state.isCleared = true;
+    // 期間を薄く表示
+    markPeriodAsDeleting(state);
+  }
+  
+  updateButtons(state);
+  renderCalendar(state);
+});
+```
+
+---
+
+#### 確定/戻るボタンの処理
+
+```javascript
+confirmBtn.addEventListener('click', () => {
+  if (confirmBtn.textContent === '確定') {
+    // 変更を確定
+    if (state.isCleared) {
+      // 泊まり期間削除
+      clearTomariPeriod(state.userId);
+    } else {
+      // 泊まり期間更新
+      setTomariPeriod(
+        state.userId,
+        state.checkInDate,
+        state.checkOutDate
+      );
+    }
+    
+    // カレンダーを閉じる
+    hideCalendar();
+    
+    // グリッドを再描画
+    refreshGrid();
+    
+  } else {
+    // 戻る（キャンセル）
+    hideCalendar();
+  }
+});
+```
+
+---
+
+## 6. 縦軸整列の設計
+
+### 6.1 縦軸整列の要件（マスト）
 
 **ユーザーの要求**:
 > 「ピッタリ縦軸がそろっていることはマストだ。そうでないと見づらくてしょうがない」
@@ -491,247 +780,140 @@ function handleCellClick(event) {
 **縦軸整列の対象**:
 1. カレンダーヘッダー（日付・曜日）
 2. 日別サマリー（通い・泊まり・訪問の数値）
-3. メインコンテンツ（通いセクションの予定表）
-
-```
-カレンダーヘッダー: │ 1  2  3  4  5  6 ...│
-日別サマリー:       │12 15 10  8 12 14 ...│
-通い予定表:         │○  ◓  ◒  -  ○  - ...│
-                     ↑  ↑  ↑  ↑  ↑  ↑
-              縦軸が完璧に揃っている（マスト要件）
-```
+3. 通いグリッド（この列）
 
 ---
 
-### 5.2 CSS変数による統一
-
-**共通のセル幅定義**:
+### 6.2 CSS変数による統一
 
 ```css
-/* グローバルCSS変数（L3_UI_統合UI設計.mdで定義） */
 :root {
-  /* ラベル列は固定 */
-  --label-column-width: 80px;
-  
-  /* 日付セルは画面幅に応じて動的計算（レスポンシブ設計） */
-  /* 横スクロール禁止のため、clamp()を使用 */
-  --date-cell-width: clamp(
-    35px,                                /* 最小幅（これ以下にならない） */
-    calc((100vw - 80px - 30px) / 31),   /* 計算値 */
-    50px                                 /* 最大幅（これ以上大きくならない） */
-  );
+  /* 縦軸整列のための共通変数 */
+  --label-column-width: 80px;  /* 利用者名列 */
+  --date-cell-width: 40px;     /* 日付セル */
 }
 
-/**
- * 詳細はL3_UI_統合UI設計.mdを参照
- * すべての画面で横スクロールなし（マスト要件）
- */
-
-/* 通いセクションで使用 */
-.schedule-grid .user-header,
-.schedule-grid .user-cell {
-  width: var(--label-column-width);
-  min-width: var(--label-column-width);
-}
-
-.schedule-grid .date-header,
-.schedule-grid .schedule-cell {
-  width: var(--date-cell-width);
-  min-width: var(--date-cell-width);
-  max-width: var(--date-cell-width);
-}
-```
-
-**重要**:
-- すべてのセル幅をCSS変数で統一
-- カレンダーヘッダー、日別サマリーと同じ値を使用
-- `min-width`, `width`, `max-width` の3つを設定（ズレ防止）
-
----
-
-### 5.3 table-layout: fixedの使用
-
-```css
-.schedule-grid {
+/* 通いグリッド */
+#kayoi-grid {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed; /* マスト要件 */
+  table-layout: fixed; /* 重要: 幅を固定 */
+}
+
+#kayoi-grid .user-header {
+  width: var(--label-column-width);
+}
+
+#kayoi-grid .date-header,
+#kayoi-grid .schedule-cell {
+  min-width: var(--date-cell-width);
+  width: var(--date-cell-width);
 }
 ```
 
-**理由**:
-- セル幅を均等に配分
-- コンテンツの長さに影響されない
-- 縦軸のズレを防ぐ
-
 ---
 
-### 5.4 縦軸整列の検証方法
+### 6.3 カレンダーヘッダーとの同期
 
-**開発時の確認**:
-
-```javascript
-/**
- * 縦軸整列のデバッグ用関数
- */
-function debugVerticalAlignment() {
-  // ラベル列の幅を確認
-  const userHeader = document.querySelector('.schedule-grid .user-header');
-  const calendarLabel = document.querySelector('.calendar-ruler-table .label-cell');
-  const summaryLabel = document.querySelector('.summary-table .label');
-  
-  console.log('ラベル列の幅:');
-  console.log('  通い予定表:', userHeader?.offsetWidth);
-  console.log('  カレンダー:', calendarLabel?.offsetWidth);
-  console.log('  サマリー:', summaryLabel?.offsetWidth);
-  
-  // 日付セルの幅を確認
-  const scheduleCell = document.querySelector('.schedule-grid .schedule-cell');
-  const calendarCell = document.querySelector('.calendar-ruler-table .date-cell');
-  const summaryCell = document.querySelector('.summary-table .cell');
-  
-  console.log('日付セルの幅:');
-  console.log('  通い予定表:', scheduleCell?.offsetWidth);
-  console.log('  カレンダー:', calendarCell?.offsetWidth);
-  console.log('  サマリー:', summaryCell?.offsetWidth);
-  
-  // すべて同じ値であれば縦軸が揃っている
-  const labelsMatch = (
-    userHeader?.offsetWidth === calendarLabel?.offsetWidth &&
-    userHeader?.offsetWidth === summaryLabel?.offsetWidth
-  );
-  
-  const cellsMatch = (
-    scheduleCell?.offsetWidth === calendarCell?.offsetWidth &&
-    scheduleCell?.offsetWidth === summaryCell?.offsetWidth
-  );
-  
-  console.log('縦軸整列チェック:');
-  console.log('  ラベル列:', labelsMatch ? '✓ OK' : '✗ NG');
-  console.log('  日付セル:', cellsMatch ? '✓ OK' : '✗ NG');
-  
-  return labelsMatch && cellsMatch;
-}
-
-// 開発環境で実行
-if (process.env.NODE_ENV === 'development') {
-  window.debugVerticalAlignment = debugVerticalAlignment;
-}
-```
-
-**実行方法**:
-1. ブラウザのコンソールで `debugVerticalAlignment()` を実行
-2. すべてのセル幅が一致しているか確認
-3. ズレがある場合は、CSS変数の値を確認
-
----
-
-### 5.5 スクロール時の縦軸保持
+**L3_UI_統合UI設計.md**で定義されたカレンダーヘッダーと同じCSS変数を使用：
 
 ```css
-/* カレンダーヘッダーと日別サマリーをsticky固定 */
-.calendar-header-ruler {
-  position: sticky;
-  top: 160px; /* 日別サマリーの下 */
-  z-index: 90;
+/* カレンダーヘッダー（L3で定義） */
+.calendar-header .date-cell {
+  min-width: var(--date-cell-width);
+  width: var(--date-cell-width);
 }
 
-.daily-summary-container {
-  position: sticky;
-  top: 50px; /* ヘッダーの下 */
-  z-index: 100;
+/* 通いグリッド（このドキュメント） */
+#kayoi-grid .schedule-cell {
+  min-width: var(--date-cell-width);
+  width: var(--date-cell-width);
 }
 
-/* 通い予定表は縦スクロールのみ */
-.schedule-grid-container {
-  overflow-x: hidden; /* 横スクロール禁止（マスト要件） */
-  overflow-y: auto;   /* 縦スクロールのみ */
-}
-```
-
-**重要**:
-- カレンダーヘッダーと日別サマリーは固定
-- 予定表は縦スクロールのみ（横スクロール禁止）
-- スクロール時も縦軸が維持される
-- レスポンシブ設計により、すべての画面幅で31日分が収まる
-
----
-
-## 6. まとめ
-
-### 6.1 v3.0で定義したこと
-
-```
-✅ v3.0で定義したこと
-├─ 縦軸整列の設計（マスト要件）
-│   ├─ CSS変数による統一
-│   ├─ table-layout: fixedの使用
-│   └─ 縦軸整列の検証方法
-├─ ドキュメントのスリム化
-│   ├─ 共通仕様を削除
-│   └─ セクション固有の内容に特化
-└─ 実装の優先順位を明確化
-    ├─ Phase 1: 基本機能
-    └─ Phase 2: 拡張機能
+→ 両方が同じ幅になる
 ```
 
 ---
 
-### 6.2 v2.0からの主要な変更
+## 7. アニメーション
 
-| 項目 | v2.0 | v3.0 |
+### 7.1 セル更新時のフェード
+
+```css
+.schedule-cell.updated {
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    background-color: rgba(33, 150, 243, 0.3);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+```
+
+---
+
+### 7.2 カレンダー表示時のフェード
+
+```css
+.calendar-dialog {
+  animation: slideIn 0.15s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+```
+
+---
+
+## 8. まとめ
+
+### 8.1 v4.0の主な変更点
+
+| 項目 | v3.0 | v4.0 |
 |------|------|------|
-| **縦軸整列** | 記載なし | マスト要件として明記 |
-| **CSS変数** | 使用せず | --label-column-width, --date-cell-width |
-| **ドキュメント行数** | 933行 | 約400行 |
-| **カレンダー操作** | 詳細記載 | L3層に委譲 |
-| **印刷・レスポンシブ** | 詳細記載 | L1層に委譲（または削除） |
+| 定員表示 | あり | **削除** |
+| 短押し | ○→◓→◒→空欄 | 同じ |
+| 長押し | なし | **カレンダー表示** |
+| 泊まり表現 | なし | **罫線（青/薄青）** |
+| 操作の複雑さ | 低 | 中（カレンダー追加） |
 
 ---
 
-### 6.3 重要な設計判断
+### 8.2 設計の意図
 
-1. **縦軸整列をマスト要件にした理由**
-   - ユーザーの明確な要求
-   - カレンダーヘッダーが「物差し」として機能
-   - 視認性の向上
+1. **定員表示の削除**
+   - 日別サマリーで十分
+   - 画面をシンプルに
 
-2. **CSS変数を使用した理由**
-   - セル幅の統一
-   - 保守性の向上
-   - 縦軸整列の保証
+2. **長押しでカレンダー**
+   - 泊まりの量を通いタブで調整
+   - 目で見て期間を設定できる
 
-3. **ドキュメントをスリム化した理由**
-   - Less is Moreの原則
-   - セクション固有の内容に特化
-   - 重複排除
+3. **罫線で泊まり表現**
+   - 記号とバッティングしない
+   - 視覚的に分かりやすい
 
 ---
 
-### 6.4 削除したセクション（v3.0）
-
-以下のセクションは削除しました：
-
-- ❌ セクション5: カレンダー操作 → **L3_UI_統合UI設計.md**で定義
-- ❌ セクション6: フィードバック → 実装時に判断
-- ❌ セクション7: 印刷レイアウト → L1層または削除
-- ❌ セクション8: レスポンシブ対応 → L1層または削除
-- ❌ セクション9: アクセシビリティ → L1層または削除
-- ❌ セクション10: パフォーマンス最適化 → L1層または削除
-
-**理由**:
-- 共通仕様であり、セクション別に記述する必要がない
-- 重複を避ける
-- ドキュメントの保守性向上
-
----
-
-### 6.5 実装の優先順位
+### 8.3 実装の優先順位
 
 **Phase 1（必須）**:
 - ✅ グリッド表示
-- ✅ セルのクリック処理
-- ✅ 定員表示と視覚化
+- ✅ 短押し処理
+- ✅ 罫線表示
+- ✅ 長押し＋カレンダー
 - ✅ 縦軸整列
 
 **Phase 2（拡張）**:
@@ -747,18 +929,18 @@ if (process.env.NODE_ENV === 'development') {
 
 ### 関連ドキュメント
 
+- **L2_通い_ロジック設計.md v3.0** - 長押し処理、カレンダーロジック
 - **L3_UI_統合UI設計.md v3.0** - カレンダーヘッダー、全体レイアウト
-- **L3_UI_日別サマリー設計.md v2.0** - 日別サマリーの詳細
-- **L2_通い_データ構造.md** - KayoiScheduleクラスの仕様
-- **L2_通い_ロジック設計.md** - 定員チェック、バリデーション
+- **U3_UI_日別サマリー.md v2.0** - 日別サマリーの詳細
+- **L2_通い_データ構造.md v4.0** - UserScheduleDataの仕様
 
 ---
 
 ## 📝 参考資料
 
-- L2_通い_データ構造.md（KayoiScheduleクラス）
+- L2_通い_データ構造.md v4.0（データ構造）
 - L3_UI_統合UI設計.md v3.0（カレンダーヘッダー）
-- L3_UI_日別サマリー設計.md v2.0（縦軸整列）
+- U3_UI_日別サマリー.md v2.0（縦軸整列）
 - L1_技術_実装制約.md（UI/UX規約）
 - CHECKLIST_設計レビュー.md（インタラクションの詳細記述）
 
@@ -771,17 +953,18 @@ if (process.env.NODE_ENV === 'development') {
 | 2025-11-23 | 1.0 | 初版作成 | Claude |
 | 2025-11-23 | 2.0 | 詳細設計追加（933行） | Claude |
 | 2025-11-29 | 3.0 | 縦軸整列追加、スリム化（約400行） | Claude |
+| 2025-12-19 | 4.0 | 長押しカレンダー、罫線表現、定員表示削除 | Claude |
 
 ---
 
-**最終更新**: 2025年11月29日  
+**最終更新**: 2025年12月19日  
 **次回更新予定**: Phase 1実装中のフィードバック反映時
 
 ---
 
 ## ⚠️ 設計チェックリスト
 
-このドキュメントの品質チェック（v3.0）：
+このドキュメントの品質チェック（v4.0）：
 
 - [x] セクション固有の内容に特化している
 - [x] 縦軸整列の設計が詳細に記述されている
@@ -789,8 +972,9 @@ if (process.env.NODE_ENV === 'development') {
 - [x] すべてのインタラクションが具体的に記述されている
 - [x] カーソルの形状が定義されている
 - [x] 状態遷移図が作成されている
-- [x] 共通仕様（印刷等）が削除されている
-- [x] ドキュメントがスリム化されている
+- [x] 長押し処理が詳細に記述されている
+- [x] カレンダーUIが完全に設計されている
+- [x] ボタン状態管理が明確
 
 ---
 
