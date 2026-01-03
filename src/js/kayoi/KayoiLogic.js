@@ -23,20 +23,22 @@ export class KayoiLogic {
     this.masterData = masterDataManager;
     this.schedules = new Map(); // key: スケジュールのkey, value: KayoiSchedule
     
-    // v4.0: 利用者ごとのデータ構造
-    this.userDataMap = new Map(); // key: userId, value: { userId, tomariPeriod, kayoiSchedule, updatedAt }
+    // v5.0: 利用者ごとのデータ構造（tomariPeriod削除）
+    this.userDataMap = new Map(); // key: userId, value: { userId, kayoiSchedule, updatedAt }
+    
+    // v5.0: 泊まり予約データ（TomariReservation配列）
+    this.tomariReservations = []; // TomariReservationの配列
   }
 
   /**
-   * v4.0: 利用者データを取得または初期化
+   * v5.0: 利用者データを取得または初期化
    * @param {string} userId
-   * @returns {Object} { userId, tomariPeriod, kayoiSchedule, updatedAt }
+   * @returns {Object} { userId, kayoiSchedule, updatedAt }
    */
   getUserData(userId) {
     if (!this.userDataMap.has(userId)) {
       this.userDataMap.set(userId, {
         userId: userId,
-        tomariPeriod: null,
         kayoiSchedule: {},
         updatedAt: new Date().toISOString()
       });
@@ -45,18 +47,21 @@ export class KayoiLogic {
   }
 
   /**
-   * v4.0: 泊まり期間を設定
+   * v5.0: 指定日の泊まり予約を検索
    * @param {string} userId
-   * @param {Object} tomariPeriod - { checkInDate, checkOutDate } or null
+   * @param {string} date - 日付（YYYY-MM-DD）
+   * @returns {Object|null} TomariReservation or null
    */
-  setTomariPeriod(userId, tomariPeriod) {
-    const userData = this.getUserData(userId);
-    userData.tomariPeriod = tomariPeriod;
-    userData.updatedAt = new Date().toISOString();
+  findTomariReservation(userId, date) {
+    return this.tomariReservations.find(r =>
+      r.userId === userId &&
+      date >= r.startDate &&
+      date <= r.endDate
+    ) || null;
   }
 
   /**
-   * v4.0: セルに表示する記号を取得
+   * v5.0: セルに表示する記号を取得
    * @param {string} userId
    * @param {string} date - 日付（YYYY-MM-DD）
    * @returns {string} 表示記号（"", "○", "◓", "◒"）
@@ -65,10 +70,12 @@ export class KayoiLogic {
     const userData = this.userDataMap.get(userId);
     if (!userData) return "";
     
-    // 泊まり期間内かチェック
-    const isInTomariPeriod = userData.tomariPeriod && 
-      date >= userData.tomariPeriod.checkInDate && 
-      date <= userData.tomariPeriod.checkOutDate;
+    // 泊まり期間内かチェック（TomariReservation配列を検索）
+    const isInTomariPeriod = this.tomariReservations.some(r =>
+      r.userId === userId &&
+      date >= r.startDate &&
+      date <= r.endDate
+    );
     
     // 明示的なkayoi設定を確認
     const kayoi = userData.kayoiSchedule[date];
@@ -89,24 +96,23 @@ export class KayoiLogic {
   }
 
   /**
-   * v4.0: セルの罫線状態を取得
+   * v5.0: セルの罫線状態を取得
    * @param {string} userId
    * @param {string} date - 日付（YYYY-MM-DD）
    * @returns {string} 罫線状態（"none", "stay", "checkout"）
    */
   getBorderState(userId, date) {
-    const userData = this.userDataMap.get(userId);
-    if (!userData || !userData.tomariPeriod) return "none";
-    
-    const { checkInDate, checkOutDate } = userData.tomariPeriod;
+    // その日の泊まり予約を検索
+    const reservation = this.findTomariReservation(userId, date);
+    if (!reservation) return "none";
     
     // 入所日〜退所日前日: stay（青罫線）
-    if (date >= checkInDate && date < checkOutDate) {
+    if (date < reservation.endDate) {
       return "stay";
     }
     
     // 退所日: checkout（薄青罫線）
-    if (date === checkOutDate) {
+    if (date === reservation.endDate) {
       return "checkout";
     }
     
@@ -367,23 +373,12 @@ export class KayoiLogic {
   }
 
   /**
-   * v4.0: 泊まりデータから期間を同期
+   * v5.0: 泊まりデータを同期（配列を保持）
    * @param {Array} tomariReservations - TomariReservationの配列
    */
   syncTomariData(tomariReservations) {
-    // 全ユーザーの泊まり期間をクリア
-    for (const userData of this.userDataMap.values()) {
-      userData.tomariPeriod = null;
-    }
-    
-    // 泊まり予約データから期間を設定
-    if (tomariReservations && tomariReservations.length > 0) {
-      tomariReservations.forEach(reservation => {
-        this.setTomariPeriod(reservation.userId, {
-          checkInDate: reservation.startDate,
-          checkOutDate: reservation.endDate
-        });
-      });
-    }
+    // TomariReservation配列をそのまま保持
+    this.tomariReservations = tomariReservations || [];
+    console.log('✅ KayoiLogic: 泊まりデータ同期完了', this.tomariReservations.length, '件');
   }
 }

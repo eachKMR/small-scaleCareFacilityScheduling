@@ -48,8 +48,9 @@ export class TomariLogic {
 
   /**
    * 予約追加
+   * v2.0: 定員チェックを追加
    * @param {Object} reservationData - 予約データ
-   * @returns {TomariReservation|null}
+   * @returns {Object} { success: boolean, reservation?: TomariReservation, warnings?: string[] }
    */
   addReservation(reservationData) {
     try {
@@ -57,23 +58,40 @@ export class TomariLogic {
       
       // バリデーション
       const validation = reservation.validate();
-      if (!validation.isValid) {
-        console.error('予約データが無効:', validation.errors);
-        return null;
+      if (!validation.valid) {
+        console.error('予約データが無効:', validation.error);
+        return { success: false, errors: [validation.error] };
       }
 
-      // 重複チェック
-      if (this.hasConflict(reservation)) {
+      // roomIdがnullでない場合は重複チェック
+      if (reservation.roomId !== null && this.hasConflict(reservation)) {
         console.error('予約が重複しています');
-        return null;
+        return { success: false, errors: ['予約が重複しています'] };
       }
 
+      // 🆕 定員チェック
+      const capacityCheck = this.checkCapacity(
+        reservation.startDate,
+        reservation.endDate
+      );
+
+      // 予約を追加
       this.reservations.push(reservation);
       this.saveToStorage();
-      return reservation;
+      
+      // 🆕 定員超過の警告を返す
+      if (capacityCheck.overDates && capacityCheck.overDates.length > 0) {
+        return {
+          success: true,
+          reservation: reservation,
+          warnings: [capacityCheck.message]
+        };
+      }
+      
+      return { success: true, reservation: reservation };
     } catch (error) {
       console.error('予約追加エラー:', error);
-      return null;
+      return { success: false, errors: [error.message] };
     }
   }
 
@@ -126,6 +144,83 @@ export class TomariLogic {
     this.reservations.splice(index, 1);
     this.saveToStorage();
     return true;
+  }
+
+  /**
+   * 🆕 予約削除（エイリアス）
+   * @param {string} id - 予約ID
+   * @returns {boolean}
+   */
+  removeReservation(id) {
+    return this.deleteReservation(id);
+  }
+
+  /**
+   * 🆕 指定期間のすべての日の定員をチェック
+   * @param {string} startDate - チェック対象の開始日（"YYYY-MM-DD"）
+   * @param {string} endDate - チェック対象の終了日（"YYYY-MM-DD"）
+   * @returns {Object} { ok: boolean, message?: string, overDates?: string[] }
+   */
+  checkCapacity(startDate, endDate) {
+    const CAPACITY = 9; // 泊まり定員
+    const dates = this.getDateRange(startDate, endDate);
+    const overDates = [];
+    const warnings = [];
+    
+    // 期間内のすべての日をチェック
+    for (const date of dates) {
+      const count = this.countReservations(date);
+      
+      if (count === CAPACITY) {
+        // 定員ちょうど（警告）
+        warnings.push(`${date}は定員に達しています（${count}人）`);
+        overDates.push(date);
+      } else if (count > CAPACITY) {
+        // 定員超過（警告）
+        warnings.push(`${date}は定員を超えています（${count}人/${CAPACITY}人）`);
+        overDates.push(date);
+      }
+    }
+    
+    if (warnings.length > 0) {
+      return {
+        ok: true, // 警告のみ（保存は可能）
+        message: warnings.join(', '),
+        overDates: overDates
+      };
+    }
+    
+    return { ok: true };
+  }
+
+  /**
+   * 🆕 指定日の宿泊者数をカウント
+   * @param {string} date - チェック対象の日付（"YYYY-MM-DD"）
+   * @returns {number} 宿泊者数
+   */
+  countReservations(date) {
+    return this.reservations.filter(r => 
+      r.startDate <= date && date <= r.endDate
+    ).length;
+  }
+
+  /**
+   * 🆕 日付範囲を配列で取得
+   * @param {string} startDate - "YYYY-MM-DD"
+   * @param {string} endDate - "YYYY-MM-DD"
+   * @returns {string[]} ["YYYY-MM-DD", ...]
+   */
+  getDateRange(startDate, endDate) {
+    const dates = [];
+    const current = new Date(startDate);
+    const end = new Date(endDate);
+    
+    while (current <= end) {
+      dates.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return dates;
   }
 
   /**

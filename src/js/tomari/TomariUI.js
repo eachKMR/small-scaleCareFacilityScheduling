@@ -36,6 +36,7 @@ export class TomariUI {
 
   /**
    * グリッド描画（テーブル行を生成）
+   * v2.0: 未割当行を追加（10行構成）
    */
   renderGrid() {
     const rooms = this.masterData.getRooms();
@@ -43,7 +44,10 @@ export class TomariUI {
 
     let html = '';
 
-    // 各居室の行を生成
+    // 🆕 1行目: 未割当行
+    html += this.renderUnassignedRow(dates);
+
+    // 2～10行目: 各居室の行を生成
     rooms.forEach(room => {
       html += '<tr class="tomari-room-row" data-room-id="' + room.roomId + '">';
       
@@ -88,6 +92,62 @@ export class TomariUI {
       html += '</tr>';
     });
 
+    return html;
+  }
+
+  /**
+   * 🆕 未割当行を描画
+   * @param {string[]} dates - 日付配列
+   * @returns {string} HTML
+   */
+  renderUnassignedRow(dates) {
+    let html = '<tr class="unassigned-row">';
+    
+    // ラベル列
+    html += '<td class="room-cell unassigned-label">未割当</td>';
+    
+    // 日付セル
+    dates.forEach(date => {
+      html += this.renderUnassignedCell(date);
+    });
+    
+    html += '</tr>';
+    return html;
+  }
+
+  /**
+   * 🆕 未割当セルを描画
+   * @param {string} date - "YYYY-MM-DD"
+   * @returns {string} HTML
+   */
+  renderUnassignedCell(date) {
+    // この日の未割当予約を取得（roomId=null）
+    const unassignedReservations = this.logic.reservations.filter(r => 
+      r.roomId === null && 
+      r.startDate <= date && 
+      date <= r.endDate
+    );
+    
+    let html = '<td class="schedule-cell unassigned-cell" data-date="' + date + '">';
+    
+    if (unassignedReservations.length > 0) {
+      // 縦積みで表示
+      html += '<div class="user-stack">';
+      unassignedReservations.forEach(reservation => {
+        const user = this.masterData.getUserById(reservation.userId);
+        const lastName = user ? (user.nameLast || user.name.split(' ')[0]) : '不明';
+        html += '<div class="user-name" '
+             +  'data-user-id="' + reservation.userId + '" '
+             +  'data-reservation-id="' + reservation.id + '" '
+             +  'draggable="true"'
+             +  'title="' + (user ? user.name : '不明') + '">';
+        html += lastName;
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    
+    html += '</td>';
     return html;
   }
 
@@ -203,11 +263,16 @@ export class TomariUI {
         note
       });
 
-      if (result) {
+      if (result && result.success) {
+        // 定員警告がある場合は表示
+        if (result.warnings && result.warnings.length > 0) {
+          alert('⚠️ 警告:\n' + result.warnings.join('\n') + '\n\n予約は登録されました。');
+        }
         this.render();
         dialog.remove();
       } else {
-        alert('予約の登録に失敗しました。日付や重複を確認してください。');
+        const errors = result && result.errors ? result.errors.join('\n') : '不明なエラー';
+        alert('❌ 予約の登録に失敗しました:\n' + errors);
       }
     });
 

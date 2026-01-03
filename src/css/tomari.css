@@ -151,3 +151,63 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
 }
+
+/* ==================== 🆕 未割当行（v2.0） ==================== */
+
+/* 未割当行 */
+.unassigned-row {
+  background-color: #fff9e6;
+}
+
+.unassigned-row .room-cell {
+  background-color: #fff3cd;
+  font-weight: bold;
+  color: #856404;
+}
+
+/* 未割当セル */
+.unassigned-cell {
+  min-height: 30px;
+  height: auto; /* 可変高さ */
+  vertical-align: top;
+  padding: 4px;
+  background-color: #fffbf0;
+}
+
+.unassigned-cell:hover {
+  background-color: rgba(255, 193, 7, 0.1);
+}
+
+/* 縦積み */
+.user-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+
+.user-stack .user-name {
+  padding: 2px 6px;
+  background-color: #fff;
+  border: 1px solid #ffc107;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: move; /* ドラッグ可能 */
+  white-space: nowrap;
+  transition: all 0.2s;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-stack .user-name:hover {
+  background-color: #fff9e6;
+  border-color: #ff9800;
+  transform: translateX(2px);
+}
+
+/* ドラッグ中 */
+.user-stack .user-name.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}

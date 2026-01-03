@@ -140,6 +140,7 @@
     calc((100vw - 80px - 30px) / 31),
     50px
   );
+  --cell-min-height: 30px;
   
   /* ===== Breakpoints (Phase 2以降) ===== */
   --breakpoint-sm: 576px;

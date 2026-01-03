@@ -1,11 +1,19 @@
 /**
  * KayoiUI.js
- * 通いUI描画クラス
+ * 通いUI描画クラス (v4.0)
  * 
  * カレンダーグリッドの生成と更新
+ * - UserScheduleDataを使用した通い＋泊まり統合表示
+ * - 短押し：トグル（空欄→○→◓→◒→空欄）
+ * - 長押し：カレンダー表示（泊まり期間設定）
+ * - 罫線による泊まり期間表示
+ * 
+ * @version 4.0
+ * @reference L2_通い_UI設計.md v4.0
  */
 
 import { DateUtils } from '../common/utils/DateUtils.js';
+import { UserScheduleData } from './UserScheduleData.js';
 
 export class KayoiUI {
   constructor(containerElement, masterDataManager, kayoiLogic) {
@@ -23,7 +31,8 @@ export class KayoiUI {
     
     // v4.0: 長押し検出
     this.longPressTimer = null;
-    this.LONG_PRESS_DURATION = 800; // 0.8秒（変更不可）
+    this.LONG_PRESS_DURATION = 500; // 0.5秒（v4.0変更: 800ms→500ms ユーザビリティ改善）
+    this.longPressCell = null; // 長押し中のセル
     
     // v4.0: カレンダー状態
     this.calendarState = null;
@@ -108,10 +117,15 @@ export class KayoiUI {
    * @param {string} yearMonth - "YYYY-MM"
    */
   render(yearMonth) {
+    console.log('🎨 KayoiUI.render() called:', yearMonth);
+    
     this.currentYearMonth = yearMonth;
     
     const dates = DateUtils.generateDatesInMonth(yearMonth);
     const users = this.masterData.getAllUsers();
+    
+    console.log('🎨 Users count:', users.length);
+    console.log('🎨 Dates count:', dates.length);
 
     // グリッドをクリア
     this.container.innerHTML = '';
@@ -133,6 +147,8 @@ export class KayoiUI {
       this.renderEmptyState();
     }
 
+    console.log('🎨 Render completed');
+    
     // ❌ 定員表示は v3.1 で削除済み（日別サマリーで管理）
     // this.updateCapacityDisplay();
   }
@@ -257,23 +273,89 @@ export class KayoiUI {
     
     if (symbol) {
       cell.classList.add('has-schedule');
-      cell.innerHTML = `
-        <span class="symbol">${symbol}</span>
-      `;
+      // pointer-eventsを確実にするため、spanにもイベントを通す
+      const symbolSpan = document.createElement('span');
+      symbolSpan.className = 'symbol';
+      symbolSpan.textContent = symbol;
+      symbolSpan.style.pointerEvents = 'none'; // spanはイベントを受け取らない
+      cell.appendChild(symbolSpan);
     }
 
     // v4.0: 長押し検出イベント
-    cell.addEventListener('mousedown', (e) => {
+    console.log('🔧 Setting up event listeners for cell:', { userId, date });
+    
+    // TEST: 最もシンプルな形でイベントをテスト
+    cell.onmousedown = (e) => {
+      console.log('🟢 ONMOUSEDOWN (inline) fired!', { userId, date, button: e.button });
+    };
+    
+    const mouseDownHandler = (e) => {
+      console.log('📱 Cell mousedown event fired!', { 
+        userId, 
+        date, 
+        button: e.button,
+        target: e.target,
+        currentTarget: e.currentTarget,
+        targetClassName: e.target.className
+      });
+      e.preventDefault();
+      e.stopPropagation();
       this.handleMouseDown(cell, userId, date);
-    });
+    };
     
-    cell.addEventListener('mouseup', (e) => {
+    const mouseUpHandler = (e) => {
+      console.log('📱 Cell mouseup event fired!', { userId, date, button: e.button });
+      e.preventDefault();
+      e.stopPropagation();
       this.handleMouseUp(cell, userId, date);
-    });
+    };
     
-    cell.addEventListener('mouseleave', (e) => {
+    const mouseLeaveHandler = (e) => {
+      console.log('📱 Cell mouseleave event fired!', { userId, date });
       this.handleMouseLeave();
-    });
+    };
+    
+    const mouseEnterHandler = (e) => {
+      console.log('📱 Cell mouseenter event fired!', { userId, date });
+    };
+    
+    const contextMenuHandler = (e) => {
+      console.log('📱 Contextmenu fired during long press!', { userId, date, timerExists: !!this.longPressTimer });
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // 長押しタイマーが動いている場合は、長押しとして扱う
+      if (this.longPressTimer) {
+        console.log('🟣 Converting contextmenu to long press');
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+        
+        // プログレスバーを削除
+        if (cell._progressBar) {
+          cell._progressBar.remove();
+          delete cell._progressBar;
+        }
+        
+        // 長押し処理を実行
+        cell.classList.remove('pressing');
+        cell.classList.add('long-pressed');
+        this.handleLongPress(cell, userId, date);
+      }
+      
+      return false;
+    };
+    
+    // addEventListener でも試す
+    cell.addEventListener('mousedown', mouseDownHandler, true);
+    cell.addEventListener('mousedown', (e) => {
+      console.log('📱 SECOND mousedown listener fired!');
+    }, false);
+    cell.addEventListener('mouseup', mouseUpHandler, true);
+    cell.addEventListener('mouseleave', mouseLeaveHandler);
+    cell.addEventListener('mouseenter', mouseEnterHandler);
+    cell.addEventListener('contextmenu', contextMenuHandler);
+    
+    console.log('✅ Schedule cell created with event listeners:', { userId, date, hasSymbol: !!symbol });
 
     return cell;
   }
@@ -387,24 +469,98 @@ export class KayoiUI {
    * mousedown イベント処理
    */
   handleMouseDown(cell, userId, date) {
+    console.log('🟡 handleMouseDown:', { userId, date, duration: this.LONG_PRESS_DURATION });
+    
+    // 既存のタイマーをクリア
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+    
+    // 視覚的フィードバック: 押している間セルを強調
+    cell.classList.add('pressing');
+    this.longPressCell = cell;
+    
+    // プログレスインジケーターを表示
+    const progressBar = document.createElement('div');
+    progressBar.className = 'long-press-progress';
+    progressBar.style.cssText = `
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      background: #2196f3;
+      width: 0%;
+      transition: width ${this.LONG_PRESS_DURATION}ms linear;
+    `;
+    cell.appendChild(progressBar);
+    cell._progressBar = progressBar;
+    
+    // プログレスバーをアニメーション
+    setTimeout(() => {
+      if (progressBar.parentElement) {
+        progressBar.style.width = '100%';
+      }
+    }, 10);
+    
     // 長押しタイマー開始
+    const startTime = Date.now();
+    cell._startTime = startTime;
+    console.log('⏱️ Timer START at:', startTime);
+    
     this.longPressTimer = setTimeout(() => {
+      const elapsed = Date.now() - startTime;
+      console.log('🎉 Long press timer FIRED!', { elapsed, expected: this.LONG_PRESS_DURATION });
+      console.log('🎉 Calling handleLongPress...');
+      
+      // 強調表示を解除
+      cell.classList.remove('pressing');
+      cell.classList.add('long-pressed');
+      
+      // プログレスバーを削除
+      if (cell._progressBar) {
+        cell._progressBar.remove();
+        delete cell._progressBar;
+      }
+      
       this.handleLongPress(cell, userId, date);
       this.longPressTimer = null;
+      this.longPressCell = null;
     }, this.LONG_PRESS_DURATION);
+    
+    console.log('🟡 Timer set, ID:', this.longPressTimer, 'will fire in:', this.LONG_PRESS_DURATION, 'ms');
   }
 
   /**
    * mouseup イベント処理
    */
   handleMouseUp(cell, userId, date) {
+    const timerExists = !!this.longPressTimer;
+    const elapsedTime = cell._startTime ? Date.now() - cell._startTime : 0;
+    console.log('🟡 handleMouseUp, timer exists:', timerExists, 'timer ID:', this.longPressTimer, 'elapsed:', elapsedTime, 'ms');
+    
+    // プログレスバーを削除
+    if (cell._progressBar) {
+      cell._progressBar.remove();
+      delete cell._progressBar;
+    }
+    
+    // 視覚的フィードバックを解除
+    if (this.longPressCell) {
+      this.longPressCell.classList.remove('pressing');
+      this.longPressCell = null;
+    }
+    
     if (this.longPressTimer) {
       // タイマーが残っている = 短押し
+      console.log('🟡 Clearing timer for short press (pressed for', elapsedTime, 'ms, needed', this.LONG_PRESS_DURATION, 'ms)');
       clearTimeout(this.longPressTimer);
       this.longPressTimer = null;
       
       // 短押し処理
       this.handleCellClick(cell, userId, date);
+    } else {
+      console.log('🟡 No timer (already fired or cleared)');
     }
   }
 
@@ -412,7 +568,22 @@ export class KayoiUI {
    * mouseleave イベント処理
    */
   handleMouseLeave() {
+    console.log('🟡 handleMouseLeave fired');
+    
+    // プログレスバーを削除
+    if (this.longPressCell && this.longPressCell._progressBar) {
+      this.longPressCell._progressBar.remove();
+      delete this.longPressCell._progressBar;
+    }
+    
+    // 視覚的フィードバックを解除
+    if (this.longPressCell) {
+      this.longPressCell.classList.remove('pressing');
+      this.longPressCell = null;
+    }
+    
     if (this.longPressTimer) {
+      console.log('🟡 Clearing timer due to mouseleave');
       clearTimeout(this.longPressTimer);
       this.longPressTimer = null;
     }
@@ -476,15 +647,23 @@ export class KayoiUI {
    * 長押し時の処理
    */
   handleLongPress(cell, userId, date) {
-    const userData = this.logic.getUserData(userId);
+    console.log('🔵 handleLongPress called:', { userId, date });
     
-    if (!userData) return;
+    const userData = this.logic.getUserData(userId);
+    console.log('🔵 userData:', userData);
+    
+    if (!userData) {
+      console.error('❌ userData not found');
+      return;
+    }
     
     if (userData.tomariPeriod) {
       // 編集モード
+      console.log('🔵 Showing calendar in EDIT mode');
       this.showCalendarEditMode(cell, userId, date, userData.tomariPeriod);
     } else {
       // 新規追加モード
+      console.log('🔵 Showing calendar in ADD mode');
       this.showCalendarAddMode(cell, userId, date);
     }
   }
@@ -493,11 +672,14 @@ export class KayoiUI {
    * カレンダーを新規追加モードで表示
    */
   showCalendarAddMode(cell, userId, date) {
+    console.log('🟢 showCalendarAddMode called:', { userId, date });
+    
     // イベントリスナーを初期化（初回のみ）
     this.initializeCalendarEventListeners();
     
     // 状態を作成
     this.calendarState = new CalendarState('add', userId, date);
+    console.log('🟢 calendarState created:', this.calendarState);
     
     // カレンダーを配置
     this.positionCalendar(cell);
@@ -506,7 +688,15 @@ export class KayoiUI {
     this.renderCalendar();
     
     // カレンダーを表示
-    document.getElementById('tomari-calendar').style.display = 'block';
+    const calendarElement = document.getElementById('tomari-calendar');
+    console.log('🟢 calendar element:', calendarElement);
+    
+    if (calendarElement) {
+      calendarElement.style.display = 'block';
+      console.log('🟢 Calendar display set to block');
+    } else {
+      console.error('❌ Calendar element not found!');
+    }
   }
 
   /**
@@ -662,57 +852,46 @@ export class KayoiUI {
   /**
    * 泊まり期間を設定
    * @param {string} userId - 利用者ID
+  /**
+   * v5.0: 泊まり期間を発火（イベントのみ）
+   * @param {string} userId - 利用者ID
    * @param {string} checkInDate - 入所日
    * @param {string} checkOutDate - 退所日
    */
   setTomariPeriod(userId, checkInDate, checkOutDate) {
-    const userData = this.logic.getUserData(userId);
-    if (!userData) return;
-    
     // バリデーション
     if (checkInDate >= checkOutDate) {
       alert('入所日は退所日より前である必要があります');
       return;
     }
     
-    // 泊まり期間を設定
-    userData.tomariPeriod = { checkInDate, checkOutDate };
-    userData.updatedAt = new Date().toISOString();
+    // イベント発火：泊まりデータが更新されたことを通知
+    const event = new CustomEvent('kayoi:tomariPeriodChanged', {
+      detail: { userId, checkInDate, checkOutDate }
+    });
+    document.dispatchEvent(event);
     
-    // localStorageに保存
-    this.saveToStorage();
-    
-    console.log('泊まり期間設定:', userId, checkInDate, checkOutDate);
+    console.log('👨‍👩‍👧 泊まり期間発火:', userId, checkInDate, checkOutDate);
   }
 
   /**
-   * 泊まり期間を削除
+   * v5.0: 泊まり期間削除を発火（イベントのみ）
    * @param {string} userId - 利用者ID
    */
   clearTomariPeriod(userId) {
-    const userData = this.logic.getUserData(userId);
-    if (!userData) return;
+    // 既存の泊まり予約を取得（main.jsで削除するため）
+    // 注：v5.0ではKayoiLogicがtomariReservationsを保持している
+    const allReservations = this.logic.tomariReservations.filter(r => r.userId === userId);
     
-    const oldPeriod = userData.tomariPeriod;
-    
-    // 泊まり期間を削除
-    userData.tomariPeriod = null;
-    
-    // 泊まり期間内の通い情報も削除
-    if (oldPeriod) {
-      let date = oldPeriod.checkInDate;
-      while (date <= oldPeriod.checkOutDate) {
-        delete userData.kayoiSchedule[date];
-        date = this.addDays(date, 1);
-      }
+    // イベント発火: 泊まりデータが削除されたことを通知
+    if (allReservations.length > 0) {
+      const event = new CustomEvent('kayoi:tomariPeriodCleared', {
+        detail: { userId, reservations: allReservations }
+      });
+      document.dispatchEvent(event);
     }
     
-    userData.updatedAt = new Date().toISOString();
-    
-    // localStorageに保存
-    this.saveToStorage();
-    
-    console.log('泊まり期間削除:', userId);
+    console.log('🗑️ 泊まり期間削除発火:', userId, allReservations.length, '件');
   }
 
   /**

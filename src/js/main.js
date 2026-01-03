@@ -66,6 +66,9 @@ class App {
 
       // v4.0: 初期化時に泊まりデータを通いセクションに同期
       this.syncTomariToKayoi();
+      
+      // v4.0: 通いセクションからの泊まり期間変更イベントをリッスン
+      this.setupKayoiTomariSync();
 
       // 初期描画：デフォルトは日別サマリー（全体）を表示
       // セクションは非表示だが、データは初期化済み
@@ -269,6 +272,7 @@ class App {
       summarySection.style.display = 'block';
     }
     
+    
     // カレンダーヘッダーも常に表示
     const calendarHeader = document.querySelector('.calendar-header-ruler');
     if (calendarHeader) {
@@ -367,6 +371,87 @@ class App {
       this.sections.kayoi.syncTomariData(tomariReservations);
     }
   }
+  
+  /**
+   * v5.0: 通いセクションからの泊まり期間変更をリッスン
+   * 通いUIでカレンダーから泊まり期間を設定したときに、TomariReservationを作成・更新
+   * 複数期間対応（1人が1ヶ月に複数回泊まれる）
+   */
+  setupKayoiTomariSync() {
+    // 泊まり期間設定イベント
+    document.addEventListener('kayoi:tomariPeriodChanged', (e) => {
+      const { userId, checkInDate, checkOutDate } = e.detail;
+      console.log('📅 通いUIで泊まり期間設定:', userId, checkInDate, checkOutDate);
+      
+      if (!this.sections.tomari || !this.sections.tomari.logic) {
+        console.warn('泊まりセクションが初期化されていません');
+        return;
+      }
+      
+      // v5.0: 既存の予約を検索（完全一致）
+      const existingReservation = this.sections.tomari.logic.reservations.find(
+        r => r.userId === userId && 
+             r.startDate === checkInDate && 
+             r.endDate === checkOutDate
+      );
+      
+      if (!existingReservation) {
+        // TomariReservationを作成（roomId: null = 未割当）
+        const reservation = {
+          userId: userId,
+          roomId: null,  // 未割当
+          startDate: checkInDate,
+          endDate: checkOutDate,
+          status: '計画',
+          note: '通いUIから設定'
+        };
+        
+        const result = this.sections.tomari.logic.addReservation(reservation);
+        if (result && result.success) {
+          console.log('✅ TomariReservation作成（未割当）:', result.reservation);
+          
+          // 定員警告がある場合は表示
+          if (result.warnings && result.warnings.length > 0) {
+            console.warn('⚠️ 定員警告:', result.warnings.join(', '));
+          }
+        } else {
+          console.error('❌ TomariReservation作成失敗:', result ? result.errors : 'unknown error');
+        }
+        
+        // v5.0: 通いセクションに同期を通知
+        this.sections.kayoi.syncTomariData(this.sections.tomari.logic.reservations);
+      } else {
+        console.log('ℹ️ 既存の予約が存在します:', existingReservation);
+      }
+    });
+    
+    // 泊まり期間削除イベント（v5.0: 複数予約削除対応）
+    document.addEventListener('kayoi:tomariPeriodCleared', (e) => {
+      const { userId, reservations } = e.detail;
+      console.log('🗑️ 通いUIで泊まり期間削除:', userId, reservations.length, '件');
+      
+      if (!this.sections.tomari || !this.sections.tomari.logic) {
+        console.warn('泊まりセクションが初期化されていません');
+        return;
+      }
+      
+      // v5.0: ユーザーの全予約を削除
+      reservations.forEach(r => {
+        const found = this.sections.tomari.logic.reservations.find(
+          tr => tr.userId === r.userId && 
+                tr.startDate === r.startDate && 
+                tr.endDate === r.endDate
+        );
+        if (found) {
+          this.sections.tomari.logic.removeReservation(found.id);
+          console.log('✅ TomariReservation削除:', found.id);
+        }
+      });
+      
+      // v5.0: 通いセクションに同期を通知
+      this.sections.kayoi.syncTomariData(this.sections.tomari.logic.reservations);
+    });
+  }
 
   /**
    * 月表示を更新
@@ -449,12 +534,12 @@ if (document.readyState === 'loading') {
   console.log('Waiting for DOMContentLoaded...');
   document.addEventListener('DOMContentLoaded', () => {
     console.log('DOMContentLoaded fired');
-    const app = new App();
-    app.init();
+    window.app = new App();
+    window.app.init();
   });
 } else {
   // すでにロード済みの場合（ES6モジュールは常にこちら）
   console.log('DOM already loaded, initializing immediately');
-  const app = new App();
-  app.init();
+  window.app = new App();
+  window.app.init();
 }

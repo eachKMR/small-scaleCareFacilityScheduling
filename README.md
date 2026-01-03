@@ -1,7 +1,8 @@
 # プロジェクトB: 小規模多機能利用調整システム
 
-**バージョン**: 1.1.0 (Phase 1)  
-**作成日**: 2025年11月29日
+**バージョン**: 1.2.0 (Phase 1)  
+**作成日**: 2025年11月29日  
+**更新日**: 2025年12月31日
 
 ---
 
@@ -70,12 +71,16 @@
 - 前半・後半の定員管理（各15人）
 - 日別予定表（グリッド表示）
 - 定員チェック（リアルタイム警告）
-- 記号管理（○◓◒●）
+- 記号管理（○◓◒）
 - 送迎タイプ管理
+- **長押しで泊まり期間設定**（カレンダー表示）
+- **罫線による泊まり表現**（青/薄青）
 
 #### ✅ 泊まりサービス管理
+- **未割当行**（通いUIで設定された泊まり期間を縦積み表示）
 - 居室軸での予約管理（9室）
 - 期間管理（入室日→滞在→退室日）
+- **ドラッグ&ドロップで部屋割り当て**
 - 居室重複チェック
 - 夜勤負担度の可視化
 
@@ -101,30 +106,39 @@
 
 ### 原則1: セクション独立性（最重要）
 
-**3つのセクション（通い・泊まり・訪問）は完全に独立している**
+**データクラスは独立、UIクラスは自由にデータを扱える**
 
 ```
-通いセクション
-  ├─ 独立したデータ構造（KayoiSchedule）
-  ├─ 独立したUI（#kayoi-section）
-  └─ 独立したロジック（定員チェック）
+【データクラスの独立】
+通いデータ（UserScheduleData）
+  ↓ 参照しない
+泊まりデータ（TomariReservation）
+  ↓ 参照しない
+訪問データ（HoumonSchedule）
 
-泊まりセクション
-  ├─ 独立したデータ構造（TomariReservation）
-  ├─ 独立したUI（#tomari-section）
-  └─ 独立したロジック（居室割当）
+【UIクラスの自由】
+通いUI（KayoiUI）
+  ├─ UserScheduleData を扱う
+  ├─ TomariReservation も扱う（罫線表示のため）← OK
+  └─ #kayoi-section のDOMのみ操作
 
-訪問セクション
-  ├─ 独立したデータ構造（HoumonSchedule）
-  ├─ 独立したUI（#houmon-section）
-  └─ 独立したロジック（時間帯判定）
+泊まりUI（TomariUI）
+  ├─ TomariReservation を扱う
+  └─ #tomari-section のDOMのみ操作
+
+訪問UI（HoumonUI）
+  ├─ HoumonSchedule を扱う
+  └─ #houmon-section のDOMのみ操作
 ```
 
-**セクション間の通信**: イベント駆動（直接依存を避ける）
+**本質的な制約（3つのみ）**:
+1. **データクラス同士は独立** - UserScheduleDataはTomariReservationを参照しない
+2. **UI間のDOM操作禁止** - 通いUIは泊まりUIのDOMを触らない
+3. **書き込み責任の明確化** - どのUIがどのデータを作成・更新するか明確にする
 
 **理由**: 並行開発、保守性、テスト容易性、段階的リリース
 
-**詳細**: `docs/L1_概要_プロジェクト概要.md` の「4. セクション独立性の原則」
+**詳細**: `docs/L1_技術_実装制約.md` のセクション2.2、`docs/L1_概要_プロジェクト概要.md` の「4. セクション独立性の原則」
 
 ---
 
@@ -136,7 +150,7 @@
 月別予定表
   ├─ 横軸：日付（1日〜31日）
   ├─ 縦軸：利用者
-  └─ セル：利用予定（○◓◒●）
+  └─ セル：利用予定（○◓◒）
 ```
 
 ---
@@ -148,8 +162,8 @@
 ```
 居室軸グリッド
   ├─ 横軸：日付
-  ├─ 縦軸：居室（1号室〜9号室）
-  └─ セル：入退所記号（入→○→退）
+  ├─ 縦軸：未割当行 + 居室（1号室〜9号室）
+  └─ セル：苗字表示（記号なし）
 ```
 
 **詳細**: `docs/L0_業務_居室管理の重要性.md`
@@ -186,13 +200,15 @@ CAREKARTE：記録・請求に特化
 project-b/
 ├── README.md                    # このファイル
 ├── .gitignore
-├── docs/                        # 設計ドキュメント（27文書）
+├── docs/                        # 設計ドキュメント（35文書）
 │   ├── INDEX_ドキュメント構成.md    # 📍 必読：最初に読むドキュメント
 │   ├── L0_業務_*.md              # 業務知識（6文書）
-│   ├── L1_*.md                   # 基礎設計（5文書）
+│   ├── L1_*.md                   # 基礎設計（7文書）
 │   ├── L2_*.md                   # セクション別設計（9文書）
-│   ├── L3_*.md                   # 統合設計（4文書）
-│   └── GUIDE_*.md                # ガイドドキュメント（3文書）
+│   ├── L3_*.md                   # 統合設計（5文書）
+│   └── GUIDE_*.md                # ガイドドキュメント（4文書）
+│   └── TEMPLATE_*.md             # テンプレート（2文書）
+│   └── CHECKLIST_*.md            # チェックリスト（1文書）
 ├── src/                         # ソースコード
 │   ├── index.html
 │   ├── css/
@@ -252,7 +268,9 @@ code .
   ├─ 共通データ構造
   ├─ 技術仕様
   ├─ アーキテクチャ設計
-  └─ 実装制約
+  ├─ 実装制約
+  ├─ 制約ゲーム全体設計
+  └─ 実装の方針
 
 第2層（セクション別）
   ├─ 通い（データ/UI/ロジック）
@@ -263,6 +281,7 @@ code .
   ├─ 統合UI設計
   ├─ 日別サマリー設計
   ├─ CSV仕様
+  ├─ Excel仕様
   └─ 調整支援機能
 ```
 
@@ -409,11 +428,15 @@ npm test
 
 | データ | 説明 |
 |--------|------|
-| 通い予定（KayoiSchedule） | 前半・後半の利用 |
-| 泊まり予約（TomariReservation） | 居室・期間管理 |
+| 通い予定（UserScheduleData） | 前半・後半の利用、**泊まり期間** |
+| 泊まり予約（TomariReservation） | 居室・期間管理、**未割当（roomId: null）対応** |
 | 訪問予定（HoumonSchedule） | 時間帯・回数管理 |
 
-**詳細**: `docs/L1_データ_共通データ構造.md`
+**重要な設計変更（v1.2.0）**:
+- `UserScheduleData`に`tomariPeriod`を追加（通いUIでの罫線表示用）
+- `TomariReservation.roomId`をnull許可（未割当機能）
+
+**詳細**: `docs/L1_データ_共通データ構造.md`, `docs/L2_泊まり_データ構造.md v2.0`
 
 ---
 
@@ -422,13 +445,39 @@ npm test
 ### ディレクトリ構造の原則
 
 ```javascript
-// ✅ 推奨：イベント駆動
+// ✅ 推奨：UIクラスは複数のデータクラスを扱える
+class KayoiUI {
+  constructor(kayoiData, tomariData) {
+    this.kayoiData = kayoiData;    // 通いデータ
+    this.tomariData = tomariData;  // 泊まりデータも使う（罫線表示のため）
+  }
+  
+  renderCell(userId, date) {
+    const symbol = this.kayoiData.getSymbol(userId, date);
+    const border = this.tomariData.getBorderState(userId, date);
+    return `<div class="${border}">${symbol}</div>`;
+  }
+}
+
+// ✅ 推奨：イベント駆動でUI間通信
 document.dispatchEvent(new CustomEvent('kayoi:scheduleAdded', {
   detail: { userId, date, section }
 }));
 
-// ❌ 避ける：セクション間の直接依存
-import { TomariSection } from '../tomari/TomariSection.js';
+// ❌ 避ける：データクラス間の参照
+class UserScheduleData {
+  constructor() {
+    this.tomariReservation = null;  // ❌ TomariReservationへの参照
+  }
+}
+
+// ❌ 避ける：UI間のDOM操作
+class KayoiUI {
+  render() {
+    // 泊まりUIのDOMを直接操作（これはNG）
+    document.querySelector('#tomari-section .cell').textContent = '...';
+  }
+}
 ```
 
 ### 命名規則
@@ -444,7 +493,8 @@ import { TomariSection } from '../tomari/TomariSection.js';
 
 ### Phase 1（現在）- ブラウザ完結型
 
-- [x] ドキュメント作成（27文書）
+- [x] ドキュメント作成（35文書）
+- [x] 泊まりUI設計変更（未割当行、D&D）
 - [ ] 共通基盤実装
 - [ ] 通いセクション実装
 - [ ] 泊まりセクション実装
@@ -516,8 +566,18 @@ import { TomariSection } from '../tomari/TomariSection.js';
 
 ---
 
-**最終更新**: 2025年11月29日  
-**バージョン**: 1.1.0 (Phase 1)
+## 📝 更新履歴
+
+| 日付 | バージョン | 変更内容 |
+|------|----------|---------|
+| 2025-11-29 | 1.0.0 | 初版作成 |
+| 2025-11-29 | 1.1.0 | ドキュメント構成更新（27→35文書） |
+| 2025-12-31 | 1.2.0 | セクション独立性の説明を正確化、泊まりUI設計変更を反映 |
+
+---
+
+**最終更新**: 2025年12月31日  
+**バージョン**: 1.2.0 (Phase 1)
 
 ---
 

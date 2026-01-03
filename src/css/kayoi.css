@@ -1,15 +1,25 @@
 /**
  * kayoi.css
- * 通いセクション専用スタイル
+ * 通いセクション専用スタイル (v4.0)
  * 
  * ⚠️ 重要: カレンダーヘッダー（日付・曜日行）はL3で定義されており、ここでは作成しない
  * table要素を使用し、CSS変数で縦軸整列を確保
+ * 
+ * 主要機能:
+ * - グリッドレイアウト（利用者行のみ、ヘッダーなし）
+ * - 罫線による泊まり期間表現（青/薄青）
+ * - カレンダーダイアログ（泊まり期間設定用）
+ * - CSS変数による縦軸整列（--label-column-width, --date-cell-width）
+ * 
+ * @version 4.0
+ * @reference L2_通い_UI設計.md v4.0
  */
 
 /* ========== グリッドレイアウト（table要素） ========== */
 
 #kayoi-section {
   margin-bottom: var(--spacing-lg);
+  overflow-x: auto; /* 横スクロール対応 */
 }
 
 #kayoi-grid {
@@ -98,19 +108,47 @@
   width: var(--date-cell-width);
   min-width: var(--date-cell-width);
   max-width: var(--date-cell-width);
+  height: var(--cell-min-height, 30px);
+  min-height: var(--cell-min-height, 30px);
   border: 1px solid var(--color-border);
   text-align: center;
   vertical-align: middle;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
   position: relative;
+  user-select: none; /* テキスト選択を防止 */
   
   /* v4.0: デフォルトの下罫線 */
   border-bottom: 1px solid var(--color-border);
 }
 
 #kayoi-grid .schedule-cell:hover {
-  background: var(--color-bg-hover);
+  background: rgba(33, 150, 243, 0.05);
+}
+
+/* v4.0: 長押し中（視覚的フィードバック） */
+#kayoi-grid .schedule-cell.pressing {
+  background: rgba(33, 150, 243, 0.2);
+  transform: scale(0.95);
+  transition: all 0.1s ease;
+}
+
+/* v4.0: 長押し完了 */
+#kayoi-grid .schedule-cell.long-pressed {
+  background: rgba(33, 150, 243, 0.3);
+  animation: longPressComplete 0.3s ease;
+}
+
+@keyframes longPressComplete {
+  0% {
+    transform: scale(0.95);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 /* v4.0: 泊まり期間の罫線 - 入所・連泊（青） */
@@ -310,9 +348,13 @@
   border: 1px solid #ccc;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
+  z-index: var(--z-modal, 1000);
   display: none;
   animation: slideIn 0.15s ease;
+}
+
+.calendar-dialog.show {
+  display: block;
 }
 
 @keyframes slideIn {
@@ -324,6 +366,22 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* オーバーレイ（背景） */
+.calendar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: calc(var(--z-modal, 1000) - 1);
+  display: none;
+}
+
+.calendar-overlay.show {
+  display: block;
 }
 
 /* ヘッダー */
@@ -383,10 +441,16 @@
   font-size: 13px;
   border-radius: 4px;
   transition: background-color 0.15s;
+  user-select: none;
 }
 
-.calendar-cell:hover {
+.calendar-cell:hover:not(.disabled) {
   background-color: #e3f2fd;
+}
+
+.calendar-cell.disabled {
+  color: #ccc;
+  cursor: not-allowed;
 }
 
 /* セルの状態 */
@@ -398,11 +462,13 @@
 .calendar-cell.checkin {
   border: 2px solid #2196f3;
   background-color: #e3f2fd;
+  font-weight: 600;
 }
 
 .calendar-cell.checkout {
   border: 2px solid rgba(33, 150, 243, 0.5);
   background-color: rgba(227, 242, 253, 0.5);
+  font-weight: 600;
 }
 
 .calendar-cell.in-period {
@@ -412,12 +478,14 @@
 .calendar-cell.deleting {
   background-color: #e0e0e0;
   color: #9e9e9e;
+  text-decoration: line-through;
 }
 
 /* フッター */
 .calendar-footer {
   display: flex;
   justify-content: space-between;
+  gap: var(--spacing-sm);
   padding: 12px;
   border-top: 1px solid #ddd;
   border-radius: 0 0 8px 8px;
@@ -429,12 +497,19 @@
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
-  transition: background-color 0.15s;
+  transition: all 0.15s;
+  flex: 1;
+}
+
+.calendar-footer button:focus {
+  outline: 2px solid #2196f3;
+  outline-offset: 2px;
 }
 
 #calendar-clear-btn {
   background-color: white;
   color: #d32f2f;
+  border-color: #d32f2f;
 }
 
 #calendar-clear-btn:hover {
@@ -449,4 +524,10 @@
 
 #calendar-confirm-btn:hover {
   background-color: #1976d2;
+}
+
+#calendar-confirm-btn:disabled {
+  background-color: #ccc;
+  border-color: #ccc;
+  cursor: not-allowed;
 }
