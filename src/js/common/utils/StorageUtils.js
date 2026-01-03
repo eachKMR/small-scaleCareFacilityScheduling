@@ -78,6 +78,70 @@ export class StorageUtils {
   }
 
   /**
+   * 旧キーから新キーにデータを移行
+   * 初回起動時に1回だけ実行される
+   * 
+   * 設計書: L1_技術_実装制約.md v1.2 セクション7.4
+   * 設計書: L2_共通_StorageUtils設計.md
+   */
+  static migrate() {
+    const migrationKey = this.PREFIX + 'migrated';
+    
+    // 既に移行済みならスキップ
+    if (localStorage.getItem(migrationKey) === 'true') {
+      console.log('✅ データ移行済み（スキップ）');
+      return { migrated: false, reason: 'already_migrated' };
+    }
+    
+    console.log('🔄 データ移行開始...');
+    
+    // 移行対象の旧キー一覧
+    const oldKeys = ['users', 'rooms', 'staff'];
+    const migratedKeys = [];
+    
+    oldKeys.forEach(oldKey => {
+      const oldData = localStorage.getItem(oldKey);
+      
+      if (oldData !== null) {
+        const newKey = this.PREFIX + oldKey;
+        const existingData = localStorage.getItem(newKey);
+        
+        // 新キーが空 or 存在しない場合のみ移行
+        if (!existingData || existingData === '[]' || existingData === '{}') {
+          localStorage.setItem(newKey, oldData);
+          migratedKeys.push(oldKey);
+          console.log(`  ✓ ${oldKey} → ${newKey} 移行完了`);
+        } else {
+          console.log(`  ⏭️ ${newKey} は既にデータあり（スキップ）`);
+        }
+      } else {
+        console.log(`  ⏭️ ${oldKey} にデータなし（スキップ）`);
+      }
+    });
+    
+    // 移行完了フラグを保存
+    localStorage.setItem(migrationKey, 'true');
+    
+    if (migratedKeys.length > 0) {
+      console.log(`✅ データ移行完了: ${migratedKeys.join(', ')}`);
+      return { migrated: true, keys: migratedKeys };
+    } else {
+      console.log('✅ データ移行完了（移行対象なし）');
+      return { migrated: true, keys: [] };
+    }
+  }
+
+  /**
+   * マイグレーションをリセット（開発・テスト用）
+   * 本番環境では使用しない
+   */
+  static resetMigration() {
+    const migrationKey = this.PREFIX + 'migrated';
+    localStorage.removeItem(migrationKey);
+    console.log('⚠️ マイグレーションフラグをリセットしました');
+  }
+
+  /**
    * すべてのプロジェクトデータをクリア
    * @returns {boolean}
    */

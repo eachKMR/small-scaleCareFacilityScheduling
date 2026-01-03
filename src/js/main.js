@@ -8,6 +8,7 @@
 import { MasterDataManager } from './common/MasterDataManager.js';
 import { KayoiSection } from './kayoi/KayoiSection.js';
 import { DateUtils } from './common/utils/DateUtils.js';
+import { StorageUtils } from './common/utils/StorageUtils.js';
 import { CSVImportUI } from './settings/CSVImportUI.js';
 import { DailySummaryGenerator, DailySummaryRenderer, CalendarHeaderRenderer } from './common/DailySummary.js';
 import { TabJumpController, ColumnWidthCalculator } from './common/TabJump.js';
@@ -35,6 +36,14 @@ class App {
   async init() {
     try {
       console.log('Application initializing...');
+
+      // 🆕 データ移行を最初に実行
+      // 設計書: L1_技術_実装制約.md v1.2 セクション7.4
+      const migrationResult = StorageUtils.migrate();
+      
+      if (migrationResult.migrated && migrationResult.keys.length > 0) {
+        console.log('📝 旧データを移行しました:', migrationResult.keys);
+      }
 
       // マスターデータ初期化
       this.masterData = new MasterDataManager();
@@ -271,7 +280,7 @@ class App {
     if (summarySection) {
       summarySection.style.display = 'block';
     }
-    
+
     
     // カレンダーヘッダーも常に表示
     const calendarHeader = document.querySelector('.calendar-header-ruler');
